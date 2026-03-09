@@ -6,6 +6,7 @@ defmodule SymphonyV2.Plans.Subtask do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias SymphonyV2.Plans.AgentRun
   alias SymphonyV2.Plans.ExecutionPlan
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -34,6 +35,7 @@ defmodule SymphonyV2.Plans.Subtask do
     field :last_error, :string
 
     belongs_to :execution_plan, ExecutionPlan
+    has_many :agent_runs, AgentRun
 
     timestamps(type: :utc_datetime)
   end

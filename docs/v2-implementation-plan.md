@@ -124,46 +124,25 @@ UUID primary key, all fields per spec. Unique index on (execution_plan_id, posit
 
 ---
 
-## Phase 4: Core Data Model — Agent Runs (Steps 28–33)
+## Phase 4: Core Data Model — Agent Runs (Steps 28–33) ✅ DONE
 
-### Step 28: Create agent_runs migration
-```sql
-agent_runs:
-  id: uuid
-  subtask_id: references(subtasks, not null)
-  agent_type: string (not null)
-  attempt_number: integer (not null)
-  status: string (not null, default "running")
-  started_at: utc_datetime (not null)
-  completed_at: utc_datetime (nullable)
-  exit_code: integer (nullable)
-  stdout_log_path: string (nullable, path to log file on disk)
-  stderr_log_path: string (nullable)
-  duration_ms: integer (nullable)
-  error_message: text (nullable)
-  inserted_at: utc_datetime
-  updated_at: utc_datetime
-```
+### Step 28: Create agent_runs migration ✅
+UUID primary key, all fields per spec. Indexes on subtask_id and status.
 
-### Step 29: Create AgentRun schema
-`lib/symphony_v2/plans/agent_run.ex` — belongs_to subtask. Status: `running`, `succeeded`, `failed`, `timeout`.
+### Step 29: Create AgentRun schema ✅
+`lib/symphony_v2/plans/agent_run.ex` — belongs_to subtask. Status: `running`, `succeeded`, `failed`, `timeout`. Changesets for create and complete.
 
-### Step 30: Create Plans context module
-`lib/symphony_v2/plans.ex` — public API:
-- `create_plan/2` (task, parsed plan data)
-- `get_plan!/1` with subtask preloads
-- `update_plan_status/2`
-- `create_subtasks_from_plan/2` (plan, list of subtask attrs)
-- `update_subtask/2`, `update_subtask_status/2`
-- `next_pending_subtask/1` (for a given plan)
-- `all_subtasks_succeeded?/1`
-- `create_agent_run/2`, `complete_agent_run/2`
+### Step 30: Create Plans context module ✅
+`lib/symphony_v2/plans.ex` — public API: `create_plan/1`, `get_plan!/1` (with subtask+agent_run preloads), `get_plan_by_task_id/1`, `update_plan_status/2`, `create_subtasks_from_plan/2` (transactional), `update_subtask/2`, `update_subtask_status/2`, `next_pending_subtask/1`, `all_subtasks_succeeded?/1`, `create_agent_run/1`, `complete_agent_run/2`.
 
-### Step 31: Write unit tests for ExecutionPlan schema
+### Step 31: Write unit tests for ExecutionPlan schema ✅
+Already completed in Phase 3.
 
-### Step 32: Write unit tests for Subtask schema and status transitions
+### Step 32: Write unit tests for Subtask schema and status transitions ✅
+Already completed in Phase 3.
 
-### Step 33: Write unit tests for Plans context operations
+### Step 33: Write unit tests for Plans context operations ✅
+`test/symphony_v2/plans_test.exs` and `test/symphony_v2/plans/agent_run_test.exs` — 181 tests total, 0 failures. Coverage 93.68%. Full quality gate passes.
 
 ---
 
@@ -962,7 +941,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 1. Project Bootstrap | 1–8 | ✅ New Phoenix app, toolchain, Makefile |
 | 2. Authentication | 9–16 | ✅ Password auth, seed user, protected routes |
 | 3. Data Model — Tasks | 17–27 | ✅ Tasks, execution plans, subtasks schemas |
-| 4. Data Model — Agent Runs | 28–33 | Agent run tracking, Plans context |
+| 4. Data Model — Agent Runs | 28–33 | ✅ Agent run tracking, Plans context |
 | 5. App Configuration | 34–41 | Config loading, agent registry |
 | 6. Safehouse Integration | 42–48 | CLI command builder for sandboxed agents |
 | 7. Agent Execution Engine | 49–60 | GenServer wrapping CLI processes |
