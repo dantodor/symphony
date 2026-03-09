@@ -247,31 +247,31 @@ Real shell scripts run through AgentProcess → verifies log file written, Agent
 
 ---
 
-## Phase 8: Workspace Management (Steps 61–68)
+## Phase 8: Workspace Management (Steps 61–68) ✅ DONE
 
-### Step 61: Create Workspace module
-`lib/symphony_v2/workspace.ex` — manages per-task workspace directories.
+### Step 61: Create Workspace module ✅
+`lib/symphony_v2/workspace.ex` — manages per-task workspace directories. Pure functions taking workspace_root and task_id parameters.
 
-### Step 62: Implement `create/1`
-Create directory at `<workspace_root>/task-<task_id>/`. Return `{:ok, path}` or `{:error, reason}`.
+### Step 62: Implement `create/2` ✅
+Creates directory at `<workspace_root>/task-<task_id>/`. Expands paths to prevent traversal. Returns `{:ok, path}` or `{:error, reason}`.
 
-### Step 63: Implement `clone_repo/2`
-`git clone <repo_path> <workspace_path>` — clone the configured repo into the workspace. Could also use `git worktree add` for speed. Return `{:ok, path}`.
+### Step 63: Implement `clone_repo/2` ✅
+`git clone <repo_path> <workspace_path>` — clones the configured repo into the workspace via `System.cmd`. Returns `{:ok, path}` or `{:error, {:clone_failed, exit_code, output}}`.
 
-### Step 64: Implement `validate_path/1`
-Resolve symlinks, verify the path is under `workspace_root`. Prevent path traversal attacks. Reject if outside root.
+### Step 64: Implement `validate_path/2` ✅
+Resolves symlinks via `File.lstat`, verifies path is under `workspace_root` via `Path.expand`. Prevents path traversal (`../`), symlink escape, and path-equals-root. Walks each path component checking for symlinks.
 
-### Step 65: Implement `cleanup/1`
-`rm -rf <workspace_path>` after validation. Called on task completion or when human explicitly cleans up.
+### Step 65: Implement `cleanup/2` ✅
+`File.rm_rf` after validation. Validates path is under workspace_root before deletion. Returns `{:ok, paths}` or `{:error, reason}`.
 
-### Step 66: Implement `exists?/1`
-Check if workspace already exists (for restart recovery — don't re-clone).
+### Step 66: Implement `exists?/2` ✅
+Checks if workspace directory exists for a given task (for restart recovery — don't re-clone).
 
-### Step 67: Write unit tests for path validation
-Test symlink resolution, path traversal rejection, valid paths.
+### Step 67: Write unit tests for path validation ✅
+`test/symphony_v2/workspace_test.exs` — tests for: valid paths, nested paths, path-equals-root rejection, path-outside-root rejection, path traversal via `..`, symlink escape detection, paths with spaces.
 
-### Step 68: Write integration test for full lifecycle
-Create workspace → verify directory exists → verify git repo initialized → cleanup → verify removed.
+### Step 68: Write integration test for full lifecycle ✅
+Full lifecycle test: create workspace → clone repo → verify git repo initialized and files present → verify exists? → cleanup → verify removed. 278 tests total, 0 failures. Coverage 90.29%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -926,7 +926,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 5. App Configuration | 34–41 | ✅ Config loading, agent registry |
 | 6. Safehouse Integration | 42–48 | ✅ CLI command builder for sandboxed agents |
 | 7. Agent Execution Engine | 49–60 | ✅ GenServer wrapping CLI processes |
-| 8. Workspace Management | 61–68 | Per-task directory lifecycle |
+| 8. Workspace Management | 61–68 | ✅ Per-task directory lifecycle |
 | 9. Git Operations | 69–82 | Branch, commit, push, PR, stack management |
 | 10. Git Testing | 83–86 | Integration tests for git operations |
 | 11. Test Runner | 87–92 | Execute test commands, capture results |
