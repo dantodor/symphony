@@ -177,32 +177,33 @@ Custom agents added via application config: `config :symphony_v2, SymphonyV2.Age
 
 ---
 
-## Phase 6: Safehouse Integration (Steps 42–48)
+## Phase 6: Safehouse Integration (Steps 42–48) ✅ DONE
 
-### Step 42: Create Safehouse module
-`lib/symphony_v2/agents/safehouse.ex` — builds the full `safehouse` CLI command.
+### Step 42: Create Safehouse module ✅
+`lib/symphony_v2/agents/safehouse.ex` — builds the full `safehouse` CLI command. Takes agent type, workspace path, and options. Returns `{:ok, {command, args}}` tuples using list-based args (no shell string concatenation).
 
-### Step 43: Implement `build_command/3`
+### Step 43: Implement `build_command/3` ✅
 ```elixir
-Safehouse.build_command(:claude_code, "/path/to/workspace", opts)
-# → "safehouse --add-dirs=/path/to/workspace -- claude -p '...' --dangerously-skip-permissions"
+Safehouse.build_command(:claude_code, "/path/to/workspace", prompt: "Fix the bug")
+# → {:ok, {"safehouse", ["--add-dirs=/path/to/workspace", "--env-pass=ANTHROPIC_API_KEY",
+#     "--", "claude", "-p", "Fix the bug", "--dangerously-skip-permissions"]}}
 ```
-Takes agent type, workspace path, and options (prompt, extra read-only dirs, env vars).
+Also `build_command_list/3` returning flat `[command | args]` for port/System.cmd convenience.
 
-### Step 44: Handle writable workspace directory
+### Step 44: Handle writable workspace directory ✅
 `--add-dirs=<workspace_path>` — agent gets read/write access to workspace.
 
-### Step 45: Handle read-only paths
-`--add-dirs-ro=<paths>` — for any shared reference directories.
+### Step 45: Handle read-only paths ✅
+`--add-dirs-ro=<paths>` — for any shared reference directories. Multiple read-only dirs supported via `:read_only_dirs` option.
 
-### Step 46: Handle environment variable forwarding
-`--env-pass=<VAR1>,<VAR2>` — forward API keys into the sandbox.
+### Step 46: Handle environment variable forwarding ✅
+`--env-pass=<VAR1>,<VAR2>` — forward API keys into the sandbox. Agent's required env vars merged with extra vars from `:env_vars` option, deduplicated.
 
-### Step 47: Handle agent-specific flags
-Each agent has its own skip-permissions flag. Safehouse module combines safehouse flags + agent command + agent flags.
+### Step 47: Handle agent-specific flags ✅
+Each agent has its own skip-permissions flag. Safehouse module combines safehouse flags + `--` separator + agent command + agent flags. Skip-permissions defaults to true, configurable via `:skip_permissions` option.
 
-### Step 48: Write unit tests for Safehouse command building
-Test command construction for each agent type. Verify no shell injection vulnerabilities (escape/quote paths properly).
+### Step 48: Write unit tests for Safehouse command building ✅
+`test/symphony_v2/agents/safehouse_test.exs` — 27 tests covering: all 4 agent types, read-only dirs, env var forwarding and dedup, skip-permissions toggle, unknown agent errors, path safety (null bytes, semicolons, pipes, ampersands, backticks, command substitution, newlines, empty paths), safe path acceptance (spaces, dots, parent refs), and `build_command_list/3`. 252 tests total, 0 failures. Full quality gate passes.
 
 ---
 
@@ -923,7 +924,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 3. Data Model — Tasks | 17–27 | ✅ Tasks, execution plans, subtasks schemas |
 | 4. Data Model — Agent Runs | 28–33 | ✅ Agent run tracking, Plans context |
 | 5. App Configuration | 34–41 | ✅ Config loading, agent registry |
-| 6. Safehouse Integration | 42–48 | CLI command builder for sandboxed agents |
+| 6. Safehouse Integration | 42–48 | ✅ CLI command builder for sandboxed agents |
 | 7. Agent Execution Engine | 49–60 | GenServer wrapping CLI processes |
 | 8. Workspace Management | 61–68 | Per-task directory lifecycle |
 | 9. Git Operations | 69–82 | Branch, commit, push, PR, stack management |
