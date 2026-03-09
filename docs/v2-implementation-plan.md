@@ -146,54 +146,34 @@ Already completed in Phase 3.
 
 ---
 
-## Phase 5: Application Configuration (Steps 34–41)
+## Phase 5: Application Configuration (Steps 34–41) ✅ DONE
 
-### Step 34: Define AppConfig schema
-`lib/symphony_v2/app_config.ex` — typed struct for runtime configuration:
-```elixir
-%AppConfig{
-  repo_path: "/path/to/target/repo",
-  workspace_root: "/path/to/workspaces",
-  test_command: "mix test",
-  planning_agent: "claude_code",
-  review_agent: "gemini_cli",
-  default_agent: "claude_code",
-  dangerously_skip_permissions: false,
-  agent_timeout_ms: 600_000,
-  max_retries: 2
-}
-```
+### Step 34: Define AppConfig schema ✅
+`lib/symphony_v2/app_config.ex` — typed struct for runtime configuration with defaults. Fields: repo_path, workspace_root, test_command, planning_agent, review_agent, default_agent, dangerously_skip_permissions, agent_timeout_ms, max_retries.
 
-### Step 35: Load config from application env / config file
-Support loading from `config/runtime.exs` or a `symphony_v2.yml` file. Use NimbleOptions or custom validation.
+### Step 35: Load config from application env / config file ✅
+`AppConfig.load/0` loads from `Application.get_env(:symphony_v2, SymphonyV2.AppConfig)`. Dev defaults configured in `config/dev.exs` with environment variable overrides for repo_path and workspace_root.
 
-### Step 36: Create AgentRegistry module
-`lib/symphony_v2/agents/agent_registry.ex` — maps agent type atoms to CLI configurations:
-```elixir
-%AgentDef{
-  name: :claude_code,
-  command: "claude",
-  skip_permissions_flag: "--dangerously-skip-permissions",
-  prompt_flag: "-p",  # or however the agent accepts a prompt
-  env_vars: ["ANTHROPIC_API_KEY"]
-}
-```
+### Step 36: Create AgentRegistry module ✅
+`lib/symphony_v2/agents/agent_registry.ex` — maps agent type atoms to CLI configurations via `AgentDef` struct. `lib/symphony_v2/agents/agent_def.ex` — typed struct with name, command, skip_permissions_flag, prompt_flag, env_vars.
 
-### Step 37: Define agent configurations for each supported agent
-- Claude Code: `claude -p "<prompt>" --dangerously-skip-permissions`
-- Codex: `codex -q "<prompt>" --dangerously-bypass-approvals-and-sandbox`
-- Gemini CLI: `gemini -p "<prompt>"` (research exact flags)
-- Opencode: research exact CLI invocation
+### Step 37: Define agent configurations for each supported agent ✅
+- Claude Code: `claude -p "<prompt>" --dangerously-skip-permissions` (env: ANTHROPIC_API_KEY)
+- Codex: `codex -q "<prompt>" --dangerously-bypass-approvals-and-sandbox` (env: OPENAI_API_KEY)
+- Gemini CLI: `gemini -p "<prompt>"` (env: GEMINI_API_KEY)
+- Opencode: `opencode -p "<prompt>"`
 
-### Step 38: Create config validation
-Validate on app startup: repo_path exists, workspace_root is writable, configured agents are installed.
+### Step 38: Create config validation ✅
+`AppConfig.validate/1` checks: repo_path exists as directory, workspace_root exists and is writable, all agent type references (planning, review, default) are registered, timeout is positive, max_retries is non-negative. `AppConfig.load_and_validate/0` combines load + validate.
 
-### Step 39: Make agent registry extensible
-Allow adding custom agents via configuration without code changes.
+### Step 39: Make agent registry extensible ✅
+Custom agents added via application config: `config :symphony_v2, SymphonyV2.Agents.AgentRegistry, custom_agents: [%{name: ..., command: ..., prompt_flag: ...}]`. Invalid custom agent definitions are silently skipped.
 
-### Step 40: Write unit tests for config loading and validation
+### Step 40: Write unit tests for config loading and validation ✅
+`test/symphony_v2/app_config_test.exs` — 14 tests covering struct defaults, load from env, defaults when no config, validation of all fields (repo_path, workspace_root, agent types, timeout, max_retries), error accumulation, load_and_validate.
 
-### Step 41: Write unit tests for AgentRegistry (lookup, command building)
+### Step 41: Write unit tests for AgentRegistry (lookup, command building) ✅
+`test/symphony_v2/agents/agent_registry_test.exs` — 22 tests covering all/get/registered?/agent_names/agent_type_strings/build_command/builtin_agents, per-agent definition verification, custom agents via config, invalid custom agent filtering. `test/symphony_v2/agents/agent_def_test.exs` — 8 tests covering AgentDef.new with keyword/map/string keys, required field validation.
 
 ---
 
@@ -942,7 +922,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 2. Authentication | 9–16 | ✅ Password auth, seed user, protected routes |
 | 3. Data Model — Tasks | 17–27 | ✅ Tasks, execution plans, subtasks schemas |
 | 4. Data Model — Agent Runs | 28–33 | ✅ Agent run tracking, Plans context |
-| 5. App Configuration | 34–41 | Config loading, agent registry |
+| 5. App Configuration | 34–41 | ✅ Config loading, agent registry |
 | 6. Safehouse Integration | 42–48 | CLI command builder for sandboxed agents |
 | 7. Agent Execution Engine | 49–60 | GenServer wrapping CLI processes |
 | 8. Workspace Management | 61–68 | Per-task directory lifecycle |

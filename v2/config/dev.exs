@@ -90,3 +90,15 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Symphony v2 application configuration
+config :symphony_v2, SymphonyV2.AppConfig,
+  repo_path: System.get_env("SYMPHONY_REPO_PATH"),
+  workspace_root: System.get_env("SYMPHONY_WORKSPACE_ROOT", "/tmp/symphony_v2_workspaces"),
+  test_command: System.get_env("SYMPHONY_TEST_COMMAND", "mix test"),
+  planning_agent: "claude_code",
+  review_agent: "gemini_cli",
+  default_agent: "claude_code",
+  dangerously_skip_permissions: false,
+  agent_timeout_ms: 600_000,
+  max_retries: 2
