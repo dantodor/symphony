@@ -87,105 +87,40 @@ Router updated: `/` and `/users/settings` behind auth. Only `/users/register`, `
 
 ---
 
-## Phase 3: Core Data Model — Tasks (Steps 17–27)
+## Phase 3: Core Data Model — Tasks (Steps 17–27) ✅ DONE
 
-### Step 17: Create tasks migration
-```sql
-tasks:
-  id: uuid (primary key)
-  title: string (not null)
-  description: text (not null)
-  relevant_files: text (nullable, free-form constraints/paths)
-  status: string (not null, default "draft")
-  review_requested: boolean (not null, default false)
-  creator_id: references(users, not null)
-  reviewer_id: references(users, nullable)
-  reviewed_at: utc_datetime (nullable)
-  queue_position: integer (nullable, for ordering)
-  inserted_at: utc_datetime
-  updated_at: utc_datetime
-```
+### Step 17: Create tasks migration ✅
+UUID primary key, all fields per spec. Indexes on creator_id, reviewer_id, status, queue_position.
 
-### Step 18: Create Task Ecto schema
-`lib/symphony_v2/tasks/task.ex` with all fields, associations (`belongs_to :creator, User`), and changeset validations.
+### Step 18: Create Task Ecto schema ✅
+`lib/symphony_v2/tasks/task.ex` — all fields, `belongs_to :creator/:reviewer` (User), changesets for create, status transition, review, and queue position.
 
-### Step 19: Define task status enum
-Valid statuses: `draft`, `awaiting_review`, `planning`, `plan_review`, `executing`, `completed`, `failed`.
-Create helper module or use Ecto.Enum.
+### Step 19: Define task status enum ✅
+Valid statuses: `draft`, `awaiting_review`, `planning`, `plan_review`, `executing`, `completed`, `failed`. Defined as module attribute with `validate_inclusion`.
 
-### Step 20: Implement task state machine
-`lib/symphony_v2/tasks/task_state.ex` — define valid transitions:
-```
-draft → awaiting_review (if review_requested)
-draft → planning (if not review_requested)
-awaiting_review → planning (on approval by non-creator)
-planning → plan_review (plan generated)
-planning → failed (planning agent failed)
-plan_review → executing (plan approved)
-plan_review → planning (plan rejected, re-plan)
-executing → completed (all subtasks done + human approves stack)
-executing → failed (retries exhausted)
-completed → (terminal)
-failed → draft (human restarts)
-```
+### Step 20: Implement task state machine ✅
+`lib/symphony_v2/tasks/task_state.ex` — transitions map with `valid_transition?/2` and `valid_next_statuses/1`. All transitions per spec implemented.
 
-### Step 21: Create Tasks context module
-`lib/symphony_v2/tasks.ex` — public API:
-- `create_task/2` (attrs, creator)
-- `list_tasks/0`, `list_tasks_by_status/1`
-- `get_task!/1` with preloads
-- `update_task_status/2` (validates transition)
-- `approve_task_review/2` (user must not be creator)
-- `next_queued_task/0` (next task ready for processing)
+### Step 21: Create Tasks context module ✅
+`lib/symphony_v2/tasks.ex` — public API: `create_task/2`, `list_tasks/0`, `list_tasks_by_status/1`, `get_task!/1`, `update_task_status/2`, `approve_task_review/2` (self-review prevention via Multi), `next_queued_task/0`.
 
-### Step 22: Write unit tests for Task schema
-Changeset validations: required fields, status enum, review logic.
+### Step 22: Write unit tests for Task schema ✅
+`test/symphony_v2/tasks/task_test.exs` — changeset validations for required fields, title length, status enum, defaults, review_requested, relevant_files.
 
-### Step 23: Write unit tests for task state transitions
-Test all valid transitions succeed, all invalid transitions are rejected.
+### Step 23: Write unit tests for task state transitions ✅
+`test/symphony_v2/tasks/task_state_test.exs` — all valid transitions succeed, all invalid transitions rejected, terminal state (completed), unknown status handling.
 
-### Step 24: Create execution_plans migration
-```sql
-execution_plans:
-  id: uuid
-  task_id: references(tasks, not null, unique)
-  status: string (not null, default "planning")
-  raw_plan: map (JSONB, stores the parsed plan.json contents)
-  plan_file_path: string (nullable, path within workspace)
-  inserted_at: utc_datetime
-  updated_at: utc_datetime
-```
+### Step 24: Create execution_plans migration ✅
+UUID primary key, task_id (unique), status, raw_plan (JSONB), plan_file_path. Indexes on task_id (unique) and status.
 
-### Step 25: Create ExecutionPlan schema
-`lib/symphony_v2/plans/execution_plan.ex` — belongs_to task, has_many subtasks. Status enum: `planning`, `awaiting_review`, `executing`, `completed`, `failed`.
+### Step 25: Create ExecutionPlan schema ✅
+`lib/symphony_v2/plans/execution_plan.ex` — belongs_to task, has_many subtasks (ordered by position). Status enum: planning, awaiting_review, executing, completed, failed.
 
-### Step 26: Create subtasks migration
-```sql
-subtasks:
-  id: uuid
-  execution_plan_id: references(execution_plans, not null)
-  position: integer (not null)
-  title: string (not null)
-  spec: text (not null, the prompt/specification for the agent)
-  agent_type: string (not null, e.g. "claude_code", "codex", "gemini_cli", "opencode")
-  status: string (not null, default "pending")
-  branch_name: string (nullable)
-  pr_url: string (nullable)
-  pr_number: integer (nullable)
-  commit_sha: string (nullable)
-  files_changed: {:array, :string} (nullable)
-  test_output: text (nullable)
-  test_passed: boolean (nullable)
-  review_verdict: string (nullable, "approved" | "rejected")
-  review_reasoning: text (nullable)
-  retry_count: integer (not null, default 0)
-  last_error: text (nullable)
-  inserted_at: utc_datetime
-  updated_at: utc_datetime
-```
+### Step 26: Create subtasks migration ✅
+UUID primary key, all fields per spec. Unique index on (execution_plan_id, position). Indexes on execution_plan_id and status.
 
-### Step 27: Create Subtask schema
-`lib/symphony_v2/plans/subtask.ex` — belongs_to execution_plan, has_many agent_runs. Status enum: `pending`, `dispatched`, `running`, `testing`, `in_review`, `succeeded`, `failed`.
+### Step 27: Create Subtask schema ✅
+`lib/symphony_v2/plans/subtask.ex` — belongs_to execution_plan. Status enum: pending, dispatched, running, testing, in_review, succeeded, failed. Agent types: claude_code, codex, gemini_cli, opencode.
 
 ---
 
@@ -1026,7 +961,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 |-------|-------|-------------|
 | 1. Project Bootstrap | 1–8 | ✅ New Phoenix app, toolchain, Makefile |
 | 2. Authentication | 9–16 | ✅ Password auth, seed user, protected routes |
-| 3. Data Model — Tasks | 17–27 | Tasks, execution plans, subtasks schemas |
+| 3. Data Model — Tasks | 17–27 | ✅ Tasks, execution plans, subtasks schemas |
 | 4. Data Model — Agent Runs | 28–33 | Agent run tracking, Plans context |
 | 5. App Configuration | 34–41 | Config loading, agent registry |
 | 6. Safehouse Integration | 42–48 | CLI command builder for sandboxed agents |
