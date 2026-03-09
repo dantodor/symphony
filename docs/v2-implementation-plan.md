@@ -207,43 +207,43 @@ Each agent has its own skip-permissions flag. Safehouse module combines safehous
 
 ---
 
-## Phase 7: Agent Execution Engine (Steps 49–60)
+## Phase 7: Agent Execution Engine (Steps 49–60) ✅ DONE
 
-### Step 49: Create AgentProcess GenServer
-`lib/symphony_v2/agents/agent_process.ex` — manages a single agent CLI process.
+### Step 49: Create AgentProcess GenServer ✅
+`lib/symphony_v2/agents/agent_process.ex` — GenServer managing a single agent CLI process via Erlang Port.
 
-### Step 50: Implement `start_link/1`
-Accepts: `%{command: String.t(), workspace: String.t(), agent_run_id: uuid, caller: pid}`.
+### Step 50: Implement `start_link/1` ✅
+Accepts: `%{agent_type: atom, workspace: String.t, agent_run_id: uuid, prompt: String.t, caller: pid, timeout_ms: integer, safehouse_opts: keyword}`.
 
-### Step 51: Implement `init/1` — spawn the CLI process
-Open an Erlang Port with `:spawn_executable` to run the safehouse command. Set `cd: workspace`, `stderr_to_stdout: true` (or separate streams).
+### Step 51: Implement `init/1` — spawn the CLI process ✅
+Resolves command via Safehouse (or `command_override` for testing), opens Erlang Port with `:spawn_executable`, `cd: workspace`, `stderr_to_stdout: true`. Creates log file at `<workspace>/.symphony/logs/<agent_run_id>.log`.
 
-### Step 52: Handle stdout/stderr streaming
-`handle_info({port, {:data, data}}, state)` — accumulate output, write to log file, broadcast via PubSub.
+### Step 52: Handle stdout/stderr streaming ✅
+`handle_info({port, {:data, data}}, state)` — accumulates output, writes to log file, broadcasts via PubSub.
 
-### Step 53: Implement PubSub broadcasting of agent output
-Topic: `"agent_output:#{agent_run_id}"` — allows dashboard to stream output in real time.
+### Step 53: Implement PubSub broadcasting of agent output ✅
+Topic: `"agent_output:#{agent_run_id}"` — broadcasts `{:agent_output, id, text}` for each chunk and `{:agent_complete, id, result}` on completion.
 
-### Step 54: Handle process exit
-`handle_info({port, {:exit_status, status}}, state)` — record exit code, compute duration, notify caller.
+### Step 54: Handle process exit ✅
+`handle_info({port, {:exit_status, status}}, state)` — records exit code, computes duration, notifies caller via `{:agent_complete, result}` message.
 
-### Step 55: Implement timeout handling
-Use `Process.send_after(self(), :timeout, timeout_ms)` in init. On timeout, kill the port process, report timeout to caller.
+### Step 55: Implement timeout handling ✅
+`Process.send_after(self(), :timeout, timeout_ms)` in init. On timeout, kills port OS process via `kill -9`, reports timeout status. Handles late exit_status messages after timeout.
 
-### Step 56: Implement clean shutdown
-`terminate/2` — if port is still open, send kill signal, close port.
+### Step 56: Implement clean shutdown ✅
+`terminate/2` — closes log file, kills port process if still open.
 
-### Step 57: Persist agent run results
-On completion/failure/timeout, update the AgentRun record in Postgres with exit_code, duration, log paths, status.
+### Step 57: Persist agent run results ✅
+On completion/failure/timeout, updates the AgentRun record in Postgres with exit_code, duration_ms, stdout_log_path, status, completed_at.
 
-### Step 58: Create AgentSupervisor
-`lib/symphony_v2/agents/agent_supervisor.ex` — DynamicSupervisor for AgentProcess instances. `:temporary` restart strategy (don't auto-restart failed agents).
+### Step 58: Create AgentSupervisor ✅
+`lib/symphony_v2/agents/agent_supervisor.ex` — DynamicSupervisor for AgentProcess instances. `:one_for_one` strategy with `:temporary` restart on children. Added to application supervision tree. Provides `start_agent/1`, `running_count/0`.
 
-### Step 59: Write unit tests for AgentProcess
-Mock port with a simple command (`echo "test output" && exit 0`, `exit 1` for failure). Verify PubSub broadcasts, exit code detection, timeout.
+### Step 59: Write unit tests for AgentProcess ✅
+`test/symphony_v2/agents/agent_process_test.exs` — 7 tests covering: successful execution with output capture and DB persistence, failed execution (exit code 1), timeout handling with kill, PubSub broadcasting, AgentSupervisor start_agent and running_count, multi-line output capture.
 
-### Step 60: Write integration test
-Run a real command through AgentProcess → verify log file written, AgentRun record updated, caller notified.
+### Step 60: Write integration test ✅
+Real shell scripts run through AgentProcess → verifies log file written, AgentRun record updated in DB, caller notified, PubSub broadcasts sent. 259 tests total, 0 failures. Coverage 90.39%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -925,7 +925,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 4. Data Model — Agent Runs | 28–33 | ✅ Agent run tracking, Plans context |
 | 5. App Configuration | 34–41 | ✅ Config loading, agent registry |
 | 6. Safehouse Integration | 42–48 | ✅ CLI command builder for sandboxed agents |
-| 7. Agent Execution Engine | 49–60 | GenServer wrapping CLI processes |
+| 7. Agent Execution Engine | 49–60 | ✅ GenServer wrapping CLI processes |
 | 8. Workspace Management | 61–68 | Per-task directory lifecycle |
 | 9. Git Operations | 69–82 | Branch, commit, push, PR, stack management |
 | 10. Git Testing | 83–86 | Integration tests for git operations |

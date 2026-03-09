@@ -12,8 +12,7 @@ defmodule SymphonyV2.Application do
       SymphonyV2.Repo,
       {DNSCluster, query: Application.get_env(:symphony_v2, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: SymphonyV2.PubSub},
-      # Start a worker by calling: SymphonyV2.Worker.start_link(arg)
-      # {SymphonyV2.Worker, arg},
+      SymphonyV2.Agents.AgentSupervisor,
       # Start to serve requests, typically the last entry
       SymphonyV2Web.Endpoint
     ]
