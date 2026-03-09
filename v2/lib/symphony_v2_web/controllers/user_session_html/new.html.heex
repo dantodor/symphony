@@ -1,0 +1,44 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <div class="mx-auto max-w-sm space-y-4">
+    <div class="text-center">
+      <.header>
+        <p>Log in</p>
+        <:subtitle>
+          <%= if @current_scope do %>
+            You need to reauthenticate to perform sensitive actions on your account.
+          <% else %>
+            Don't have an account? <.link
+              navigate={~p"/users/register"}
+              class="font-semibold text-brand hover:underline"
+              phx-no-format
+            >Sign up</.link> for an account now.
+          <% end %>
+        </:subtitle>
+      </.header>
+    </div>
+
+    <.form :let={f} for={@form} as={:user} id="login_form" action={~p"/users/log-in"}>
+      <.input
+        readonly={!!@current_scope}
+        field={f[:email]}
+        type="email"
+        label="Email"
+        autocomplete="username"
+        spellcheck="false"
+        required
+        phx-mounted={JS.focus()}
+      />
+      <.input
+        field={f[:password]}
+        type="password"
+        label="Password"
+        autocomplete="current-password"
+        spellcheck="false"
+        required
+      />
+      <.button class="btn btn-primary w-full" name={@form[:remember_me].name} value="true">
+        Log in <span aria-hidden="true">&rarr;</span>
+      </.button>
+    </.form>
+  </div>
+</Layouts.app>

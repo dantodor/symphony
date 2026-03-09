@@ -6,89 +6,84 @@ Reference: The new app lives in a new directory (e.g., `v2/`) alongside the exis
 
 ---
 
-## Phase 1: Project Bootstrap (Steps 1–8)
+## Phase 1: Project Bootstrap (Steps 1–8) ✅ DONE
 
-### Step 1: Generate new Phoenix app
+### Step 1: Generate new Phoenix app ✅
 ```bash
-mix phx.new symphony_v2 --app symphony_v2 --module SymphonyV2
+mix phx.new v2 --app symphony_v2 --module SymphonyV2
 ```
-Place in repo root as `v2/` (or chosen name). Includes Ecto, Postgrex, Phoenix LiveView by default.
+Generated Phoenix 1.8.5 app in `v2/` directory with Ecto, Postgrex, Phoenix LiveView.
 
-### Step 2: Configure within the monorepo
-- Move generated app into `v2/` directory
-- Update `mix.exs` app name and module references if needed
-- Add `mise.toml` (or symlink to existing `elixir/mise.toml`) for Erlang/Elixir versions
+### Step 2: Configure within the monorepo ✅
+- App lives in `v2/` directory
+- Symlinked `mise.toml` → `../elixir/mise.toml` for Erlang/Elixir versions
 
-### Step 3: Configure development database
-- Update `config/dev.exs` with Postgres credentials
-- Set database name to `symphony_v2_dev`
+### Step 3: Configure development database ✅
+- Default `config/dev.exs` already uses `symphony_v2_dev` database name
+- Postgres credentials: postgres/postgres on localhost
 
-### Step 4: Create database and verify boot
-```bash
-mix ecto.create
-mix phx.server
-```
-Verify Phoenix welcome page loads at `http://localhost:4000`.
+### Step 4: Create database and verify boot ✅
+- `mix ecto.create` succeeded
+- Database `symphony_v2_dev` created
 
-### Step 5: Set up Makefile
-Create `v2/Makefile` with targets mirroring the existing project:
-```
-setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all
-```
+### Step 5: Set up Makefile ✅
+- Created `v2/Makefile` with targets: setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all
 
-### Step 6: Add Credo and Dialyxir dependencies
+### Step 6: Add Credo and Dialyxir dependencies ✅
 ```elixir
 {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
 {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
 ```
+Added `lint` alias: `["credo --strict"]`
 
-### Step 7: Configure formatter and Credo
-- `.formatter.exs` — ensure Phoenix/Ecto plugins
-- `.credo.exs` — strict mode
+### Step 7: Configure formatter and Credo ✅
+- `.formatter.exs` — Phoenix/Ecto plugins (generated default)
+- `.credo.exs` — strict mode with full check suite
 
-### Step 8: Verify full quality gate passes
-```bash
-make all
-```
-All default Phoenix tests pass, formatter clean, Credo clean, Dialyzer clean.
+### Step 8: Verify full quality gate passes ✅
+- 5 tests pass, 0 failures
+- Formatter clean
+- Credo strict: no issues
+- Dialyzer: 0 errors
+- Compile with `--warnings-as-errors`: clean
 
 ---
 
-## Phase 2: Authentication (Steps 9–16)
+## Phase 2: Authentication (Steps 9–16) ✅ DONE
 
-### Step 9: Run phx.gen.auth
+### Step 9: Run phx.gen.auth ✅
 ```bash
 mix phx.gen.auth Accounts User users
 ```
-Generates User schema, migrations, LiveView pages (register/login/settings), plugs, Accounts context.
+Generated User schema, migrations, controller pages (register/login/settings), plugs, Accounts context.
 
-### Step 10: Run auth migrations
+### Step 10: Run auth migrations ✅
 ```bash
 mix ecto.migrate
 ```
 
-### Step 11: Verify auth flow in browser
-Register a user, log in, log out, verify protected routes redirect.
+### Step 11: Verify auth flow in browser ✅
+Registration, login, logout, protected routes all working.
 
-### Step 12: Simplify auth — remove email confirmation
-Remove or disable the email confirmation flow. For a small self-hosted team, registration → immediate access.
+### Step 12: Simplify auth — remove email confirmation ✅
+- Switched to password-based registration (immediate login on register)
+- Removed magic link login flow entirely
+- Removed email confirmation/change flow
+- Removed UserNotifier module (no emails needed)
+- Cleaned up UserToken (session tokens only)
+- Simplified login to email + password only
 
-### Step 13: Create seed script
-`priv/repo/seeds.exs` — create an initial user for development:
-```elixir
-SymphonyV2.Accounts.register_user(%{email: "admin@localhost", password: "...", ...})
-```
+### Step 13: Create seed script ✅
+`priv/repo/seeds.exs` — creates `admin@localhost` / `admin_password_123` for development. Idempotent (skips if exists).
 
-### Step 14: Add `:require_authenticated_user` to all app routes
-Update router: all routes except login/register are behind auth.
+### Step 14: Add `:require_authenticated_user` to all app routes ✅
+Router updated: `/` and `/users/settings` behind auth. Only `/users/register`, `/users/log-in`, `/users/log-out` are public.
 
-### Step 15: Verify seed and auth-protected routes
-```bash
-mix ecto.reset  # drop, create, migrate, seed
-```
+### Step 15: Verify seed and auth-protected routes ✅
+`mix ecto.reset` — drop, create, migrate, seed all pass cleanly.
 
-### Step 16: Write auth tests
-Verify registration, login, logout, protected route redirects. Most generated by phx.gen.auth — review and keep.
+### Step 16: Write auth tests ✅
+71 tests pass (0 failures). Coverage 94.38%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -1029,8 +1024,8 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 
 | Phase | Steps | Description |
 |-------|-------|-------------|
-| 1. Project Bootstrap | 1–8 | New Phoenix app, toolchain, Makefile |
-| 2. Authentication | 9–16 | phx.gen.auth, user accounts |
+| 1. Project Bootstrap | 1–8 | ✅ New Phoenix app, toolchain, Makefile |
+| 2. Authentication | 9–16 | ✅ Password auth, seed user, protected routes |
 | 3. Data Model — Tasks | 17–27 | Tasks, execution plans, subtasks schemas |
 | 4. Data Model — Agent Runs | 28–33 | Agent run tracking, Plans context |
 | 5. App Configuration | 34–41 | Config loading, agent registry |

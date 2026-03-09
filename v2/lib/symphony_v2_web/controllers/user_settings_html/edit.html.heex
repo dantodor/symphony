@@ -1,0 +1,32 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <div class="text-center">
+    <.header>
+      Account Settings
+      <:subtitle>Manage your account password</:subtitle>
+    </.header>
+  </div>
+
+  <.form :let={f} for={@password_changeset} action={~p"/users/settings"} id="update_password">
+    <input type="hidden" name="action" value="update_password" />
+
+    <.input
+      field={f[:password]}
+      type="password"
+      label="New password"
+      autocomplete="new-password"
+      spellcheck="false"
+      required
+    />
+    <.input
+      field={f[:password_confirmation]}
+      type="password"
+      label="Confirm new password"
+      autocomplete="new-password"
+      spellcheck="false"
+      required
+    />
+    <.button variant="primary" phx-disable-with="Changing...">
+      Save Password
+    </.button>
+  </.form>
+</Layouts.app>
