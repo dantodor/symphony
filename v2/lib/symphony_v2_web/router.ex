@@ -52,7 +52,21 @@ defmodule SymphonyV2Web.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     get "/", PageController, :home
+
     get "/users/settings", UserSettingsController, :edit
     put "/users/settings", UserSettingsController, :update
+  end
+
+  ## Authenticated LiveView routes
+
+  live_session :authenticated,
+    on_mount: {SymphonyV2Web.UserAuth, :ensure_authenticated} do
+    scope "/", SymphonyV2Web do
+      pipe_through [:browser]
+
+      live "/tasks", TaskLive.Index, :index
+      live "/tasks/new", TaskLive.New, :new
+      live "/tasks/:id", TaskLive.Show, :show
+    end
   end
 end

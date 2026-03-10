@@ -63,6 +63,35 @@ defmodule SymphonyV2Web.UserAuth do
   end
 
   @doc """
+  LiveView on_mount hook that assigns current_scope from session token.
+  """
+  def on_mount(:ensure_authenticated, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+
+    if socket.assigns.current_scope && socket.assigns.current_scope.user do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+        |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
+
+      {:halt, socket}
+    end
+  end
+
+  defp mount_current_scope(socket, session) do
+    Phoenix.Component.assign_new(socket, :current_scope, fn ->
+      with token when is_binary(token) <- session["user_token"],
+           {user, _token_inserted_at} <- Accounts.get_user_by_session_token(token) do
+        Scope.for_user(user)
+      else
+        _ -> nil
+      end
+    end)
+  end
+
+  @doc """
   Authenticates the user by looking into the session and remember me token.
 
   Will reissue the session token if it is older than the configured age.

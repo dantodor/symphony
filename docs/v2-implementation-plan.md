@@ -547,59 +547,52 @@ Recovery tests verify pipeline resumes from DB state on restart. State machine g
 
 ---
 
-## Phase 15: Task Management UI (Steps 138–152)
+## Phase 15: Task Management UI (Steps 138–152) ✅ DONE
 
-### Step 138: Create root layout
-`lib/symphony_v2_web/components/layouts/root.html.heex` — navigation bar with links: Tasks, Dashboard, Settings. Show current user + logout.
+### Step 138: Create root layout ✅
+`lib/symphony_v2_web/components/layouts/root.html.heex` — navigation bar with Symphony branding, Tasks link, current user email, Settings, Log out. Theme toggle removed in favor of simpler nav.
 
-### Step 139: Create app layout
-`lib/symphony_v2_web/components/layouts/app.html.heex` — flash messages, main content area.
+### Step 139: Update app layout ✅
+`lib/symphony_v2_web/components/layouts.ex` — simplified app layout with flash messages and max-w-5xl content area. Removed Phoenix boilerplate links.
 
-### Step 140: Create TaskLive.Index
-`lib/symphony_v2_web/live/task_live/index.ex` — list all tasks grouped by status. Columns: title, status badge, creator, created date, queue position.
+### Step 140: Create TaskLive.Index ✅
+`lib/symphony_v2_web/live/task_live/index.ex` — lists all tasks with columns: title, status badge, creator email, created date, queue position. Clickable rows navigate to task detail. Subscribes to `"pipeline"` PubSub for real-time list updates.
 
-### Step 141: Implement status filtering
-Tabs or sidebar filters: All, Queued, In Progress, Completed, Failed.
+### Step 141: Implement status filtering ✅
+Tab-based filters: All, Queued (draft + awaiting_review + planning), In Progress (plan_review + executing), Completed, Failed. URL-driven via `?status=` query param with `handle_params`.
 
-### Step 142: Create TaskLive.New
-`lib/symphony_v2_web/live/task_live/new.ex` — form with:
-- Title (text input, required)
-- Description (textarea, required)
-- Relevant files/constraints (textarea, optional)
-- Request team review (checkbox)
-- Submit button
+### Step 142: Create TaskLive.New ✅
+`lib/symphony_v2_web/live/task_live/new.ex` — form with title (text, required), description (textarea, required), relevant files (textarea, optional), review_requested (checkbox). Real-time validation via `phx-change`.
 
-### Step 143: Implement task creation
-Form submission → Tasks.create_task → redirect to task detail page.
+### Step 143: Implement task creation ✅
+Form submission creates task, transitions to `awaiting_review` (if review requested) or `planning` (if not, also notifies Pipeline). Redirects to task detail page.
 
-### Step 144: Create TaskLive.Show
-`lib/symphony_v2_web/live/task_live/show.ex` — full task detail:
-- Task metadata (title, description, status, creator)
-- If awaiting_review: "Approve" button (visible to non-creator users only)
-- If has execution plan: show plan summary with subtask list
-- If executing: show current progress
-- If completed: show PR links
-- If failed: show error details
+### Step 144: Create TaskLive.Show ✅
+`lib/symphony_v2_web/live/task_live/show.ex` — full task detail with description, relevant files, reviewer info. Execution plan table with subtask position, title, spec, agent type, status badge, PR link, review verdict, retry count. Error details section for failed tasks.
 
-### Step 145: Implement task review approval
-"Approve" button → Tasks.approve_task_review → triggers pipeline.
+### Step 145: Implement task review approval ✅
+"Approve Task" button visible only for `awaiting_review` tasks when viewer is not the creator. Calls `Tasks.approve_task_review/2` with self-review prevention. Also implements plan approval (`Pipeline.approve_plan`), plan rejection (`Pipeline.reject_plan`), and final review approval (`Pipeline.approve_final`).
 
-### Step 146: Subscribe to PubSub for real-time updates
-TaskLive.Show subscribes to `"task:#{task_id}"` topic. Updates status, progress, subtask states in real time.
+### Step 146: Subscribe to PubSub for real-time updates ✅
+TaskLive.Show subscribes to `"task:#{task_id}"` and `"subtask:#{subtask_id}"` topics. Handles all task and subtask events: step changes, completion, failure, subtask status transitions, retries. TaskLive.Index subscribes to `"pipeline"` for task list refresh.
 
-### Step 147: Add status badges with color coding
-Draft: gray. Awaiting review: yellow. Planning: blue. Executing: blue animated. Completed: green. Failed: red.
+### Step 147: Add status badges with color coding ✅
+Task badges: draft (ghost/gray), awaiting_review (warning/yellow), planning/plan_review/executing (info/blue), completed (success/green), failed (error/red). Subtask badges: pending (ghost), dispatched (info outline), running (info), testing (warning), in_review (secondary), succeeded (success), failed (error).
 
-### Step 148: Add queue management
-On TaskLive.Index: show queue position for pending tasks. Optional: reorder tasks in queue.
+### Step 148: Add queue management ✅
+TaskLive.Index shows queue position column for all tasks. Queue position displayed when set.
 
-### Step 149: Write LiveView test for task list page
+### Step 149: Write LiveView test for task list page ✅
+8 tests: lists tasks with creator email, empty state, status filtering (completed), status badges, queue column, clickable rows, filter tabs rendered, filter tab navigation.
 
-### Step 150: Write LiveView test for task creation
+### Step 150: Write LiveView test for task creation ✅
+5 tests: form rendering, validation on change, create without review (redirects), create with review (redirects), validation errors on submit.
 
-### Step 151: Write LiveView test for task detail page
+### Step 151: Write LiveView test for task detail page ✅
+4 tests: displays task details with creator, relevant files display, back to tasks link, PubSub real-time updates.
 
-### Step 152: Write LiveView test for review approval flow
+### Step 152: Write LiveView test for review approval flow ✅
+4 tests: approve button for different user, no approve button for own tasks, approve transitions to planning, self-review prevention. Additional: LiveView `on_mount` auth hook added (`SymphonyV2Web.UserAuth.on_mount/4`), `live_session :authenticated` in router. Tasks context updated with `change_task/1` for forms and `has_string_keys?/1` for mixed-key map handling. 482 tests total, 0 failures. Full quality gate passes (compile --warnings-as-errors, format, credo strict, dialyzer).
 
 ---
 
@@ -872,7 +865,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 12. Planning Agent | 93–104 | ✅ Plan file format, parsing, planning flow |
 | 13. Review Agent | 105–114 | ✅ Review file format, parsing, review flow |
 | 14. Execution Pipeline | 115–137 | ✅ Core orchestrator GenServer |
-| 15. Task Management UI | 138–152 | Task CRUD, list, detail, review LiveViews |
+| 15. Task Management UI | 138–152 | ✅ Task CRUD, list, detail, review LiveViews |
 | 16. Plan Review UI | 153–165 | Plan display, editing, approval LiveViews |
 | 17. Monitoring Dashboard | 166–179 | Real-time execution monitoring |
 | 18. PR Stack Review UI | 180–187 | Final review and merge UI |

@@ -11,9 +11,18 @@ defmodule SymphonyV2.Tasks do
   @doc "Creates a new task for the given creator."
   @spec create_task(map(), %{id: any()}) :: {:ok, %Task{}} | {:error, Ecto.Changeset.t()}
   def create_task(attrs, creator) do
+    # Use string key if attrs are string-keyed (e.g. from form params)
+    key = if has_string_keys?(attrs), do: "creator_id", else: :creator_id
+
     %Task{}
-    |> Task.create_changeset(Map.put(attrs, :creator_id, creator.id))
+    |> Task.create_changeset(Map.put(attrs, key, creator.id))
     |> Repo.insert()
+  end
+
+  defp has_string_keys?(map) when map_size(map) == 0, do: false
+
+  defp has_string_keys?(map) do
+    map |> Map.keys() |> List.first() |> is_binary()
   end
 
   @doc "Lists all tasks ordered by insertion time."
@@ -22,6 +31,7 @@ defmodule SymphonyV2.Tasks do
     Task
     |> order_by([t], desc: t.inserted_at)
     |> Repo.all()
+    |> Repo.preload(:creator)
   end
 
   @doc "Lists tasks filtered by status."
@@ -31,6 +41,7 @@ defmodule SymphonyV2.Tasks do
     |> where([t], t.status == ^status)
     |> order_by([t], desc: t.inserted_at)
     |> Repo.all()
+    |> Repo.preload(:creator)
   end
 
   @doc "Gets a single task by ID. Raises if not found."
@@ -76,6 +87,12 @@ defmodule SymphonyV2.Tasks do
         {:error, _step, changeset, _changes} -> {:error, changeset}
       end
     end
+  end
+
+  @doc "Returns a changeset for tracking task changes in forms."
+  @spec change_task(%Task{}, map()) :: Ecto.Changeset.t()
+  def change_task(task, attrs \\ %{}) do
+    Task.create_changeset(task, attrs)
   end
 
   @doc "Returns the next task ready for processing, ordered by queue position."
