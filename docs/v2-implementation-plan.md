@@ -339,15 +339,16 @@ Create a stack of 3 branches with incremental work, verify file isolation per br
 
 ---
 
-## Phase 11: Test Runner (Steps 87–92)
+## Phase 11: Test Runner (Steps 87–92) ✅ DONE
 
-### Step 87: Create TestRunner module
-`lib/symphony_v2/test_runner.ex` — runs the configured test command in a workspace.
+### Step 87: Create TestRunner module ✅
+`lib/symphony_v2/test_runner.ex` — runs the configured test command in a workspace via Erlang Port with `sh -c` for shell command support.
 
-### Step 88: Implement `run/2`
-Takes workspace path and test command. Executes via `System.cmd` or Port. Captures stdout/stderr, exit code.
+### Step 88: Implement `run/3` ✅
+Takes workspace path, test command, and options. Executes via Erlang Port with `stderr_to_stdout`. Captures stdout/stderr, exit code. Returns `{:ok, TestResult.t()}` or `{:error, term()}`.
 
-### Step 89: Return structured result
+### Step 89: Return structured result ✅
+`lib/symphony_v2/test_runner/test_result.ex` — enforced keys struct:
 ```elixir
 %TestResult{
   passed: boolean,
@@ -357,14 +358,14 @@ Takes workspace path and test command. Executes via `System.cmd` or Port. Captur
 }
 ```
 
-### Step 90: Implement timeout handling
-Configurable timeout. Kill test process if exceeded.
+### Step 90: Implement timeout handling ✅
+Configurable via `:timeout_ms` option (default: 300_000ms / 5 min). Uses `Process.send_after` + `kill -9` on timeout. Returns exit_code 137 and appends `[TEST TIMEOUT]` to output. Drains remaining port messages after kill.
 
-### Step 91: Persist test results
-Write test output to log file in workspace. Update subtask record with test_passed, test_output.
+### Step 91: Persist test results ✅
+`run_and_persist/4` — writes test output to `<workspace>/.symphony/logs/test_output.log`, updates subtask record with `test_passed` and `test_output` (truncated to 100KB). Handles workspace validation and DB persistence errors gracefully.
 
-### Step 92: Write tests for TestRunner
-Test with `true` (pass) and `false` (fail) commands. Test timeout handling.
+### Step 92: Write tests for TestRunner ✅
+`test/symphony_v2/test_runner_test.exs` — 17 tests covering: successful/failed commands, stdout/stderr capture, multi-line output, workspace directory execution, non-existent workspace error, non-zero exit codes, duration measurement, timeout with kill, partial output before timeout, DB persistence of pass/fail results, log file writing, TestResult struct enforcement. 366 tests total, 0 failures. Coverage 93.43%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -924,7 +925,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 8. Workspace Management | 61–68 | ✅ Per-task directory lifecycle |
 | 9. Git Operations | 69–82 | ✅ Branch, commit, push, PR, stack management |
 | 10. Git Testing | 83–86 | ✅ Integration tests for git operations |
-| 11. Test Runner | 87–92 | Execute test commands, capture results |
+| 11. Test Runner | 87–92 | ✅ Execute test commands, capture results |
 | 12. Planning Agent | 93–104 | Plan file format, parsing, planning flow |
 | 13. Review Agent | 105–114 | Review file format, parsing, review flow |
 | 14. Execution Pipeline | 115–137 | Core orchestrator GenServer |
