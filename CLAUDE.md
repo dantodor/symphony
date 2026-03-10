@@ -86,3 +86,53 @@ If behavior or config changes, update in the same PR:
 - `README.md` for project concept/goals
 - `elixir/WORKFLOW.md` for workflow/config contract
 - `SPEC.md` if implementation changes alter intended behavior
+
+---
+
+## Symphony v2
+
+Self-contained Phoenix/Postgres orchestration app in `v2/`. Multi-agent task dispatch with stacked PRs.
+
+### v2 Build & Development Commands
+
+All commands run from the `v2/` directory.
+
+```bash
+# Setup
+mise trust && mise install && mix setup
+
+# Run
+mix phx.server             # start at http://localhost:4000
+
+# Format
+mix format                 # auto-format
+mix format --check-formatted  # check only
+
+# Lint
+mix lint                   # credo --strict
+
+# Test
+mix test                   # all tests
+mix test test/symphony_v2/pipeline_test.exs          # single file
+mix test test/symphony_v2/pipeline_test.exs:42       # single test by line
+
+# Coverage (88% threshold enforced)
+mix test --cover
+
+# Dialyzer
+mix dialyzer --format short
+
+# Full quality gate
+make all                   # = setup, build, fmt-check, lint, coverage, dialyzer
+```
+
+### v2 Architecture
+
+Phoenix LiveView app with Pipeline GenServer orchestrator. Key modules:
+- `lib/symphony_v2/pipeline.ex` — Core orchestration GenServer
+- `lib/symphony_v2/agents/` — Agent execution (AgentProcess, PlanningAgent, ReviewAgent, Safehouse)
+- `lib/symphony_v2/tasks.ex` — Task context (CRUD, state machine)
+- `lib/symphony_v2/plans.ex` — Plans/Subtasks context
+- `lib/symphony_v2/git_ops.ex` — Git operations (branch, commit, push, PR, rebase)
+- `lib/symphony_v2/workspace.ex` — Per-task workspace isolation
+- `lib/symphony_v2_web/live/` — LiveView pages (tasks, plan review, dashboard, settings)

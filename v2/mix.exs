@@ -41,6 +41,7 @@ defmodule SymphonyV2.MixProject do
           SymphonyV2.TasksFixtures,
           SymphonyV2.PlansFixtures,
           SymphonyV2.GitTestHelper,
+          SymphonyV2.MockAgentHelper,
           SymphonyV2.DataCase,
           SymphonyV2Web.ConnCase
         ]
