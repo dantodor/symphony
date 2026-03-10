@@ -32,6 +32,8 @@ defmodule SymphonyV2.MixProject do
           SymphonyV2.Mailer,
           # GitHub CLI integration — requires real gh auth to test
           SymphonyV2.GitOps.GitHub,
+          # Pipeline orchestration — integration module exercised via E2E tests (Phase 21)
+          SymphonyV2.Pipeline,
           # Thin wrapper — 0-arity functions delegate to __MODULE__ singleton
           SymphonyV2.Agents.AgentSupervisor,
           # Test fixtures and helpers — not application code

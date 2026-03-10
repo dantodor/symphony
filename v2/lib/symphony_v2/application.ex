@@ -13,6 +13,7 @@ defmodule SymphonyV2.Application do
       {DNSCluster, query: Application.get_env(:symphony_v2, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: SymphonyV2.PubSub},
       SymphonyV2.Agents.AgentSupervisor,
+      SymphonyV2.Pipeline,
       # Start to serve requests, typically the last entry
       SymphonyV2Web.Endpoint
     ]
