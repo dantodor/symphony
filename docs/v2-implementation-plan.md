@@ -410,50 +410,46 @@ No plan file, invalid format, malformed JSON, empty tasks, or agent error → ma
 
 ---
 
-## Phase 13: Review Agent Integration (Steps 105–114)
+## Phase 13: Review Agent Integration (Steps 105–114) ✅ DONE
 
-### Step 105: Create ReviewAgent module
-`lib/symphony_v2/agents/review_agent.ex` — orchestrates the review step for a subtask.
+### Step 105: Create ReviewAgent module ✅
+`lib/symphony_v2/agents/review_agent.ex` — orchestrates the review step for a subtask. Uses `with` chain: validate different agent type → get diff → build prompt → create agent run → launch agent → parse review → apply verdict.
 
-### Step 106: Build review prompt
-Include:
-- The subtask spec (what was asked)
-- The git diff of changes (`git diff <base_branch>..<subtask_branch>`)
-- Instruction to critically review for: corner-cutting, meaningless tests, hardcoded values to pass assertions, skipped requirements, code quality issues
-- Instruction to write `review.json` to workspace root
+### Step 106: Build review prompt ✅
+`build_prompt/2` includes subtask title, spec, git diff, and detailed review instructions covering: corner-cutting, meaningless tests, hardcoded values, skipped requirements, code quality.
 
-### Step 107: Define review output format
+### Step 107: Define review output format ✅
 ```json
 {
   "verdict": "approved" | "rejected",
   "reasoning": "The implementation correctly...",
   "issues": [
-    {"severity": "critical", "description": "Test uses hardcoded expected value..."}
+    {"severity": "critical" | "major" | "minor" | "nit", "description": "..."}
   ]
 }
 ```
 
-### Step 108: Create ReviewParser module
-`lib/symphony_v2/agents/review_parser.ex` — parse and validate review.json.
+### Step 108: Create ReviewParser module ✅
+`lib/symphony_v2/agents/review_parser.ex` — parses and validates review.json. Functions: `parse/1` (from file), `parse_map/1` (from decoded map). Validates: verdict (approved/rejected), reasoning (non-empty string), issues (optional list with severity/description per entry).
 
-### Step 109: Invoke review agent
-Must be a **different agent type** than the one that executed the subtask. Build safehouse command, launch via AgentProcess.
+### Step 109: Invoke review agent ✅
+Enforces **different agent type** than the executor via `validate_different_agent/2`. Builds safehouse command, launches via AgentProcess/AgentSupervisor. Supports `:diff` option for pre-computed diffs, `:agent_type` override, configurable timeout.
 
-### Step 110: After agent exit — parse review
-Locate `review.json`, parse, validate.
+### Step 110: After agent exit — parse review ✅
+Locates `review.json` in workspace root. Parses via ReviewParser. Returns structured review with verdict, reasoning, and issues.
 
-### Step 111: On approval — update subtask
-Set `review_verdict: "approved"`, `review_reasoning: reasoning`. Subtask status → `succeeded`.
+### Step 111: On approval — update subtask ✅
+Sets `review_verdict: "approved"`, `review_reasoning: reasoning`, `status: "succeeded"` via `Plans.update_subtask/2`.
 
-### Step 112: On rejection — trigger retry
-Set `review_verdict: "rejected"`, `review_reasoning: reasoning`, `last_error: reasoning`. Subtask enters retry flow.
+### Step 112: On rejection — trigger retry ✅
+Sets `review_verdict: "rejected"`, `review_reasoning: reasoning`, `last_error: reasoning`. Does NOT change subtask status — leaves that for Pipeline retry logic.
 
-### Step 113: On review failure — handle gracefully
-No review file, invalid format, or review agent error → treat as review failure, retry the subtask.
+### Step 113: On review failure — handle gracefully ✅
+All error cases handled: file_not_found, invalid_json, invalid_review_format, missing_verdict, invalid_verdict, missing_reasoning, empty_reasoning, issues_must_be_list, invalid_issues, agent_failed, agent_timeout, same_agent_type, no_changes, diff_failed. Updates subtask `last_error` with descriptive message.
 
-### Step 114: Write tests
-- Unit tests for ReviewParser
-- Integration test: mock review agent that writes review.json, verify verdict handling
+### Step 114: Write tests ✅
+`test/symphony_v2/agents/review_parser_test.exs` — 21 unit tests: valid parsing (approved/rejected/no issues/empty issues/all severities), file errors, verdict validation, reasoning validation, issues validation (missing fields, invalid severity, non-map entries), format errors, parse_map.
+`test/symphony_v2/agents/review_agent_test.exs` — 19 tests: prompt building (4 tests), review_file_path, integration with mock agents (12 tests covering approved, rejected, agent failure, missing review, timeout, invalid JSON, same-agent-type rejection, missing verdict, non-map JSON, invalid verdict, empty reasoning, invalid issues), compute_diff via git (2 tests covering diff_failed and no_changes). 438 tests total, 0 failures. Coverage 92.90%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -902,7 +898,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 10. Git Testing | 83–86 | ✅ Integration tests for git operations |
 | 11. Test Runner | 87–92 | ✅ Execute test commands, capture results |
 | 12. Planning Agent | 93–104 | ✅ Plan file format, parsing, planning flow |
-| 13. Review Agent | 105–114 | Review file format, parsing, review flow |
+| 13. Review Agent | 105–114 | ✅ Review file format, parsing, review flow |
 | 14. Execution Pipeline | 115–137 | Core orchestrator GenServer |
 | 15. Task Management UI | 138–152 | Task CRUD, list, detail, review LiveViews |
 | 16. Plan Review UI | 153–165 | Plan display, editing, approval LiveViews |
