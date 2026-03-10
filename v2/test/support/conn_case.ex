@@ -33,6 +33,20 @@ defmodule SymphonyV2Web.ConnCase do
 
   setup tags do
     SymphonyV2.DataCase.setup_sandbox(tags)
+
+    # Reset the global Pipeline to idle state before each async: false test.
+    # Other tests may leave the Pipeline's in-memory state stale (e.g., pointing
+    # to a task_id that was rolled back by the Ecto sandbox).
+    unless tags[:async] do
+      try do
+        SymphonyV2.Pipeline.reset()
+      rescue
+        _ -> :ok
+      catch
+        :exit, _ -> :ok
+      end
+    end
+
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 

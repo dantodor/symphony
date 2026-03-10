@@ -721,49 +721,34 @@ On merge/rebase failure: error alert shows the failure reason (e.g. "Rebase conf
 
 ---
 
-## Phase 19: Application Wiring & Supervision (Steps 188–195)
+## Phase 19: Application Wiring & Supervision (Steps 188–195) ✅ DONE
 
-### Step 188: Define full supervision tree
-```elixir
-children = [
-  SymphonyV2.Repo,
-  {Phoenix.PubSub, name: SymphonyV2.PubSub},
-  {SymphonyV2.Agents.AgentSupervisor, []},
-  SymphonyV2.Pipeline,
-  SymphonyV2Web.Endpoint
-]
-```
+### Step 188: Define full supervision tree ✅
+Already implemented in `lib/symphony_v2/application.ex`: Telemetry → Repo → DNSCluster → PubSub → AgentSupervisor → Pipeline → Endpoint. `:one_for_one` strategy.
 
-### Step 189: Configure startup order
-Repo must start before Pipeline (DB access). PubSub must start before Pipeline and Endpoint. AgentSupervisor must start before Pipeline.
+### Step 189: Configure startup order ✅
+Correct order verified: Repo before Pipeline (DB access), PubSub before Pipeline and Endpoint, AgentSupervisor before Pipeline.
 
-### Step 190: Implement graceful shutdown
-On application stop: Pipeline completes or checkpoints current step. AgentSupervisor terminates running agents cleanly.
+### Step 190: Implement graceful shutdown ✅
+Pipeline `terminate/2` logs shutdown context (reason, status, task_id, step). State is always persisted to DB via Tasks/Plans context calls, so recovery on restart picks up where it left off. AgentProcess `terminate/2` closes log files and kills port processes.
 
-### Step 191: Implement restart recovery
-Pipeline.init reads from DB: if a task is in-progress, determine the last completed step and resume from there.
+### Step 191: Implement restart recovery ✅
+`Pipeline.init/1` calls `maybe_recover/1` which checks DB for tasks in `executing`, `planning`, or `plan_review` status (priority order). `schedule_recovery_continuation/1` sends `{:continue, :execute_next_subtask}` for recovered executing tasks to resume processing.
 
-### Step 192: Handle child crashes
-- AgentProcess crash: Pipeline detects via monitor, treats as agent failure, enters retry logic.
-- Pipeline crash: Supervisor restarts it, Pipeline.init recovers from DB.
-- Repo crash: Application-level failure, supervisor restarts.
+### Step 192: Handle child crashes ✅
+- AgentProcess crash: Pipeline detects via `Process.monitor/1` — receives `{:DOWN, ...}` and treats as agent failure, enters retry logic.
+- Pipeline crash: Supervisor restarts it (`:permanent`), `Pipeline.init` recovers from DB.
+- AgentSupervisor uses `:temporary` restart — failed agents not auto-restarted; Pipeline handles retry logic.
+- Pipeline `reset/1` API added for test isolation (prevents stale in-memory state across async: false tests).
 
-### Step 193: Configure PubSub topics
-Document all topics and their payload shapes in a module:
-```elixir
-defmodule SymphonyV2.PubSub.Topics do
-  def pipeline, do: "pipeline"
-  def task(id), do: "task:#{id}"
-  def subtask(id), do: "subtask:#{id}"
-  def agent_output(id), do: "agent_output:#{id}"
-end
-```
+### Step 193: Configure PubSub topics ✅
+`lib/symphony_v2/pubsub/topics.ex` — centralized topic definitions with `@spec` annotations. All hardcoded topic strings replaced across Pipeline, AgentProcess, DashboardLive, TaskLive.Index, TaskLive.Show, PlanLive.Show, StackReviewLive.
 
-### Step 194: Write application startup tests
-Verify all children start in correct order, DB is accessible, Pipeline initializes.
+### Step 194: Write application startup tests ✅
+`test/symphony_v2/application_test.exs` — 6 tests: all required children running (Repo, PubSub, AgentSupervisor, Pipeline, Endpoint), supervisor name and strategy, startup order verification (Repo before Pipeline, PubSub before Pipeline, AgentSupervisor before Pipeline).
 
-### Step 195: Write crash recovery tests
-Kill Pipeline, verify restart and state recovery from DB.
+### Step 195: Write crash recovery tests ✅
+`test/symphony_v2/pipeline_recovery_test.exs` — 10 tests: crash and restart recovery (executing task, plan_review task, idle after crash with no tasks, recovery continuation scheduling), graceful terminate (normal shutdown, shutdown while processing with DB state preservation), PubSub Topics integration (pipeline, task, subtask, agent_output topics). `test/symphony_v2/pubsub/topics_test.exs` — 5 tests for topic string generation. Fixed pre-existing flaky dashboard tests via Pipeline reset in ConnCase setup. 643 tests total, 0 failures. Full quality gate passes (compile --warnings-as-errors, format, credo strict, dialyzer).
 
 ---
 
@@ -873,7 +858,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 16. Plan Review UI | 153–165 | ✅ Plan display, editing, approval LiveViews |
 | 17. Monitoring Dashboard | 166–179 | Real-time execution monitoring |
 | 18. PR Stack Review UI | 180–187 | ✅ Final review and merge UI |
-| 19. App Wiring & Supervision | 188–195 | Supervisor tree, recovery, PubSub |
+| 19. App Wiring & Supervision | 188–195 | ✅ Supervisor tree, recovery, PubSub |
 | 20. Settings UI | 196–201 | Configuration management UI |
 | 21. E2E Testing & Hardening | 202–220 | Full integration tests, security, docs |
 

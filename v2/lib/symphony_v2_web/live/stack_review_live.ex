@@ -9,6 +9,7 @@ defmodule SymphonyV2Web.StackReviewLive do
   use SymphonyV2Web, :live_view
 
   alias SymphonyV2.Plans
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
 
   @impl true
@@ -17,7 +18,7 @@ defmodule SymphonyV2Web.StackReviewLive do
     plan = Plans.get_plan_by_task_id(task_id)
 
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "task:#{task.id}")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
     end
 
     {:ok,

@@ -12,6 +12,7 @@ defmodule SymphonyV2.Agents.AgentProcess do
 
   alias SymphonyV2.Agents.Safehouse
   alias SymphonyV2.Plans
+  alias SymphonyV2.PubSub.Topics
 
   @type start_opts :: %{
           agent_type: atom(),
@@ -94,7 +95,7 @@ defmodule SymphonyV2.Agents.AgentProcess do
     # Broadcast via PubSub
     Phoenix.PubSub.broadcast(
       SymphonyV2.PubSub,
-      "agent_output:#{state.agent_run_id}",
+      Topics.agent_output(state.agent_run_id),
       {:agent_output, state.agent_run_id, text}
     )
 
@@ -211,7 +212,7 @@ defmodule SymphonyV2.Agents.AgentProcess do
     # Broadcast completion via PubSub
     Phoenix.PubSub.broadcast(
       SymphonyV2.PubSub,
-      "agent_output:#{state.agent_run_id}",
+      Topics.agent_output(state.agent_run_id),
       {:agent_complete, state.agent_run_id, result}
     )
 

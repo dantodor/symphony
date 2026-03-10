@@ -2,6 +2,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
   use SymphonyV2Web, :live_view
 
   alias SymphonyV2.Plans
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
 
   @impl true
@@ -9,7 +10,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
     task = Tasks.get_task!(id)
 
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "task:#{task.id}")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
     end
 
     plan = Plans.get_plan_by_task_id(task.id)
@@ -140,7 +141,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
   defp assign_subtask_subscriptions(socket, plan) do
     if connected?(socket) do
       Enum.each(plan.subtasks, fn subtask ->
-        Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "subtask:#{subtask.id}")
+        Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.subtask(subtask.id))
       end)
     end
 

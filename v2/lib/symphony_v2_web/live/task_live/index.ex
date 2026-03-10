@@ -1,6 +1,7 @@
 defmodule SymphonyV2Web.TaskLive.Index do
   use SymphonyV2Web, :live_view
 
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
 
   @status_filters ~w(all queued in_progress completed failed)
@@ -8,7 +9,7 @@ defmodule SymphonyV2Web.TaskLive.Index do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "pipeline")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.pipeline())
     end
 
     {:ok,

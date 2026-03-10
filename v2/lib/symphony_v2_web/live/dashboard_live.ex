@@ -9,6 +9,7 @@ defmodule SymphonyV2Web.DashboardLive do
   use SymphonyV2Web, :live_view
 
   alias SymphonyV2.Plans
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
 
   @max_output_lines 500
@@ -20,10 +21,10 @@ defmodule SymphonyV2Web.DashboardLive do
     queued_tasks = Tasks.list_queued_tasks()
 
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "pipeline")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.pipeline())
 
       if task do
-        Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "task:#{task.id}")
+        Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
         subscribe_to_subtasks(plan)
         maybe_subscribe_to_agent_output(socket, pipeline_state, plan)
       end
@@ -243,7 +244,7 @@ defmodule SymphonyV2Web.DashboardLive do
     # Subscribe to new task/subtask topics if task changed
     if connected?(socket) && task != nil &&
          task.id != (socket.assigns.task && socket.assigns.task.id) do
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "task:#{task.id}")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
       subscribe_to_subtasks(plan)
     end
 
@@ -269,7 +270,7 @@ defmodule SymphonyV2Web.DashboardLive do
 
   defp subscribe_to_subtasks(plan) do
     Enum.each(plan.subtasks, fn subtask ->
-      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "subtask:#{subtask.id}")
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.subtask(subtask.id))
     end)
   end
 
@@ -287,7 +288,7 @@ defmodule SymphonyV2Web.DashboardLive do
 
       agent_run ->
         if agent_run.id != socket.assigns.agent_run_id do
-          Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "agent_output:#{agent_run.id}")
+          Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.agent_output(agent_run.id))
           assign(socket, :agent_run_id, agent_run.id)
         else
           socket

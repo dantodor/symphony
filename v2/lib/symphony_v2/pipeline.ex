@@ -18,6 +18,7 @@ defmodule SymphonyV2.Pipeline do
   alias SymphonyV2.AppConfig
   alias SymphonyV2.GitOps
   alias SymphonyV2.Plans
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
   alias SymphonyV2.TestRunner
   alias SymphonyV2.Workspace
@@ -86,6 +87,12 @@ defmodule SymphonyV2.Pipeline do
     GenServer.call(server, :get_state)
   end
 
+  @doc "Reset the pipeline to idle state. Used in tests to clear stale in-memory state."
+  @spec reset(GenServer.server()) :: :ok
+  def reset(server \\ __MODULE__) do
+    GenServer.call(server, :reset)
+  end
+
   @doc "Pause the pipeline. Stops after the current subtask completes."
   @spec pause(GenServer.server()) :: :ok
   def pause(server \\ __MODULE__) do
@@ -123,7 +130,26 @@ defmodule SymphonyV2.Pipeline do
     # Recover from DB on startup
     state = maybe_recover(state)
 
+    # If recovered into an active state, schedule continuation
+    if state.status == :processing do
+      schedule_recovery_continuation(state)
+    end
+
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.info("Pipeline shutting down",
+      reason: inspect(reason),
+      status: state.status,
+      task_id: state.current_task_id,
+      step: state.current_step
+    )
+
+    # State is already persisted to DB via Tasks/Plans context calls,
+    # so recovery on restart will pick up where we left off.
+    :ok
   end
 
   @impl true
@@ -231,6 +257,10 @@ defmodule SymphonyV2.Pipeline do
     {:reply, Map.delete(state, :config), state}
   end
 
+  def handle_call(:reset, _from, state) do
+    {:reply, :ok, return_idle(state)}
+  end
+
   @impl true
   def handle_info({:continue, :execute_next_subtask}, state) do
     state = execute_next_subtask(state)
@@ -239,6 +269,13 @@ defmodule SymphonyV2.Pipeline do
 
   def handle_info({:continue, :check_queue}, state) do
     check_queue(self())
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
+    # AgentProcess crashed — treat as agent failure
+    Logger.warning("Monitored agent process crashed", reason: inspect(reason))
+    # The receive in run_agent_and_handle_result will timeout and handle this
     {:noreply, state}
   end
 
@@ -423,10 +460,21 @@ defmodule SymphonyV2.Pipeline do
 
   defp run_agent_and_handle_result(state, subtask, agent_opts, timeout_ms) do
     case AgentSupervisor.start_agent(agent_opts) do
-      {:ok, _pid} ->
+      {:ok, pid} ->
+        # Monitor the agent process for crash detection
+        Process.monitor(pid)
+
         receive do
           {:agent_complete, result} ->
             handle_agent_complete(state, subtask, result)
+
+          {:DOWN, _ref, :process, ^pid, reason} when reason != :normal ->
+            Logger.warning("Agent process crashed",
+              subtask_id: subtask.id,
+              reason: inspect(reason)
+            )
+
+            handle_agent_complete(state, subtask, %{status: :failed, exit_code: 1})
         after
           timeout_ms + 10_000 ->
             handle_agent_complete(state, subtask, %{status: :timeout})
@@ -1032,15 +1080,37 @@ defmodule SymphonyV2.Pipeline do
   end
 
   defp broadcast(:pipeline, message) do
-    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, "pipeline", message)
+    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, Topics.pipeline(), message)
   end
 
   defp broadcast(:task, task_id, message) do
-    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, "task:#{task_id}", message)
+    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, Topics.task(task_id), message)
   end
 
   defp broadcast(:subtask, subtask_id, message) do
-    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, "subtask:#{subtask_id}", message)
+    Phoenix.PubSub.broadcast(SymphonyV2.PubSub, Topics.subtask(subtask_id), message)
+  end
+
+  defp schedule_recovery_continuation(state) do
+    case state.current_step do
+      :executing_subtask ->
+        send(self(), {:continue, :execute_next_subtask})
+
+      :planning ->
+        # Re-planning will be triggered when the task is picked up
+        Logger.info("Recovered planning task — will resume on next queue check",
+          task_id: state.current_task_id
+        )
+
+      :awaiting_plan_review ->
+        # Waiting for human input — no action needed
+        Logger.info("Recovered task awaiting plan review",
+          task_id: state.current_task_id
+        )
+
+      _ ->
+        :ok
+    end
   end
 
   defp truncate(string, max_length) when byte_size(string) <= max_length, do: string
