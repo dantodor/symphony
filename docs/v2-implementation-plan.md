@@ -369,69 +369,44 @@ Configurable via `:timeout_ms` option (default: 300_000ms / 5 min). Uses `Proces
 
 ---
 
-## Phase 12: Planning Agent Integration (Steps 93–104)
+## Phase 12: Planning Agent Integration (Steps 93–104) ✅ DONE
 
-### Step 93: Define plan file JSON schema
-```json
-{
-  "tasks": [
-    {
-      "position": 1,
-      "title": "Design auth schema and migrations",
-      "spec": "Create Ecto migration and schema for user authentication...",
-      "agent_type": "claude_code"
-    },
-    {
-      "position": 2,
-      "title": "Implement auth middleware",
-      "spec": "Create a Phoenix plug that...",
-      "agent_type": "codex"
-    }
-  ]
-}
-```
+### Step 93: Define plan file JSON schema ✅
+JSON structure with `tasks` array containing objects with `position`, `title`, `spec`, and `agent_type` fields.
 
-### Step 94: Document plan file contract
-Create `docs/plan-file-format.md` — the planning agent is instructed to write this file. Document required fields, valid agent types, ordering rules.
+### Step 94: Document plan file contract ✅
+`docs/plan-file-format.md` — documents required fields, valid agent types, ordering rules, validation rules, and examples.
 
-### Step 95: Create PlanParser module
-`lib/symphony_v2/plans/plan_parser.ex` — parse and validate plan.json.
+### Step 95: Create PlanParser module ✅
+`lib/symphony_v2/plans/plan_parser.ex` — parses and validates plan.json files. Functions: `parse/1` (from file), `parse_map/1` (from decoded map).
 
-### Step 96: Implement `parse/1`
-Read file, decode JSON, validate structure. Return `{:ok, [%{position, title, spec, agent_type}]}` or `{:error, reason}`.
+### Step 96: Implement `parse/1` ✅
+Reads file, decodes JSON, validates structure. Returns `{:ok, [%{position, title, spec, agent_type}]}` or `{:error, reason}`.
 
-### Step 97: Validate plan contents
-- All positions are sequential starting from 1
-- All agent types are in the AgentRegistry
-- Title and spec are non-empty strings
-- At least one task
+### Step 97: Validate plan contents ✅
+Validates: sequential positions starting from 1, all agent types registered in AgentRegistry, non-empty title/spec strings, at least one task, all entries are maps.
 
-### Step 98: Create PlanningAgent module
-`lib/symphony_v2/agents/planning_agent.ex` — orchestrates the planning step.
+### Step 98: Create PlanningAgent module ✅
+`lib/symphony_v2/agents/planning_agent.ex` — orchestrates the full planning step from prompt building through plan parsing and DB record creation.
 
-### Step 99: Build the planning prompt
-Construct prompt that includes:
-- The top-level task (title, description, relevant files)
-- Instruction to explore the codebase and write `plan.json` to the workspace root
-- The plan file format specification
-- List of available agent types with descriptions
+### Step 99: Build the planning prompt ✅
+`build_prompt/1` constructs prompt with task title, description, relevant files, available agent types, plan.json format specification, and ordering rules.
 
-### Step 100: Invoke planning agent
-Use the configured planning agent type. Build safehouse command via Safehouse module. Launch via AgentProcess.
+### Step 100: Invoke planning agent ✅
+Uses configured planning agent type. Creates AgentRun record, launches via AgentSupervisor/AgentProcess with safehouse or command_override support. Waits for completion with configurable timeout.
 
-### Step 101: After agent exit — parse plan
-Locate `plan.json` in workspace root. Parse via PlanParser.
+### Step 101: After agent exit — parse plan ✅
+Locates `plan.json` in workspace root. Parses via PlanParser. Returns structured subtask entries.
 
-### Step 102: On success — create database records
-Create ExecutionPlan record. Create Subtask records from parsed plan. Transition task to `plan_review`.
+### Step 102: On success — create database records ✅
+Updates ExecutionPlan with raw_plan and plan_file_path. Creates Subtask records from parsed plan. Transitions task to `plan_review`. Cleans up temporary planning subtask.
 
-### Step 103: On failure — handle gracefully
-No plan file, invalid format, or agent error → mark task as `failed` with error details.
+### Step 103: On failure — handle gracefully ✅
+No plan file, invalid format, malformed JSON, empty tasks, or agent error → marks task as `failed` with descriptive error messages. Handles all error cases: file_not_found, invalid_json, empty_tasks, missing_tasks_key, invalid_tasks, invalid_positions, unknown_agent_types, agent_failed, agent_timeout.
 
-### Step 104: Write tests
-- Unit tests for PlanParser with valid/invalid/malformed JSON
-- Integration test: write a plan.json to a temp dir, verify PlanningAgent parses it correctly
-- Integration test: mock agent that writes a plan file, verify full flow
+### Step 104: Write tests ✅
+`test/symphony_v2/plans/plan_parser_test.exs` — 20 unit tests for PlanParser: valid parsing, file errors, JSON errors, missing/empty tasks, field validation, position validation, agent type validation, sorting, parse_map.
+`test/symphony_v2/agents/planning_agent_test.exs` — 12 tests: prompt building (5 tests), plan_file_path, integration with mock agents (6 tests covering success, agent failure, missing plan, invalid plan, timeout, malformed JSON). 398 tests total, 0 failures. Coverage 93.20%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -926,7 +901,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 9. Git Operations | 69–82 | ✅ Branch, commit, push, PR, stack management |
 | 10. Git Testing | 83–86 | ✅ Integration tests for git operations |
 | 11. Test Runner | 87–92 | ✅ Execute test commands, capture results |
-| 12. Planning Agent | 93–104 | Plan file format, parsing, planning flow |
+| 12. Planning Agent | 93–104 | ✅ Plan file format, parsing, planning flow |
 | 13. Review Agent | 105–114 | Review file format, parsing, review flow |
 | 14. Execution Pipeline | 115–137 | Core orchestrator GenServer |
 | 15. Task Management UI | 138–152 | Task CRUD, list, detail, review LiveViews |
