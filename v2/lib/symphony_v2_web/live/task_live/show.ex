@@ -294,8 +294,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
                   class={[
                     "badge badge-sm",
                     subtask.review_verdict == "approved" && "badge-success",
-                    subtask.review_verdict == "rejected" && "badge-error",
-                    subtask.review_verdict == "skipped" && "badge-ghost"
+                    subtask.review_verdict == "rejected" && "badge-error"
                   ]}
                 >
                   {subtask.review_verdict}
