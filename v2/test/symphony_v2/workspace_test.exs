@@ -102,6 +102,22 @@ defmodule SymphonyV2.WorkspaceTest do
       path = Path.join(tmp_dir, "task with spaces")
       assert :ok = Workspace.validate_path(path, tmp_dir)
     end
+
+    test "returns error for unreadable path component", %{tmp_dir: tmp_dir} do
+      root = Path.join(tmp_dir, "ws_root")
+      File.mkdir_p!(root)
+      restricted = Path.join(root, "restricted")
+      File.mkdir_p!(restricted)
+      File.chmod!(restricted, 0o000)
+
+      target = Path.join(restricted, "task-1")
+      result = Workspace.validate_path(target, root)
+
+      # Restore permissions for cleanup
+      File.chmod!(restricted, 0o755)
+
+      assert {:error, {:path_unreadable, _, _}} = result
+    end
   end
 
   describe "cleanup/2" do

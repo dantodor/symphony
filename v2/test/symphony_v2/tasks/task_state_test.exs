@@ -95,4 +95,14 @@ defmodule SymphonyV2.Tasks.TaskStateTest do
       assert TaskState.valid_next_statuses("nonexistent") == []
     end
   end
+
+  describe "transitions/0" do
+    test "returns the full transitions map" do
+      transitions = TaskState.transitions()
+      assert is_map(transitions)
+      assert Map.has_key?(transitions, "draft")
+      assert Map.has_key?(transitions, "completed")
+      assert map_size(transitions) == 7
+    end
+  end
 end

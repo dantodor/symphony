@@ -275,72 +275,67 @@ Full lifecycle test: create workspace → clone repo → verify git repo initial
 
 ---
 
-## Phase 9: Git Operations (Steps 69–82)
+## Phase 9: Git Operations (Steps 69–82) ✅ DONE
 
-### Step 69: Create GitOps module
-`lib/symphony_v2/git_ops.ex` — all git operations as pure functions taking workspace path.
+### Step 69: Create GitOps module ✅
+`lib/symphony_v2/git_ops.ex` — all git operations as pure functions taking workspace path. Uses `System.cmd("git", ["-C", workspace | args])` pattern with `{:ok, result} | {:error, reason}` tuples.
 
-### Step 70: Implement `current_branch/1`
+### Step 70: Implement `current_branch/1` ✅
 `git -C <workspace> rev-parse --abbrev-ref HEAD` — return current branch name.
 
-### Step 71: Implement `checkout_main/1`
+### Step 71: Implement `checkout_main/1` ✅
 `git -C <workspace> checkout main` — ensure we start from main.
 
-### Step 72: Implement `create_branch/2`
+### Step 72: Implement `create_branch/2` ✅
 `git -C <workspace> checkout -b <branch_name>` — create and switch to new branch.
 
-### Step 73: Define branch naming convention
-`symphony/<task_id>/step-<position>-<slug>` where slug is derived from subtask title (lowercase, hyphens, truncated).
+### Step 73: Define branch naming convention ✅
+`symphony/<task_id>/step-<position>-<slug>` where slug is derived from subtask title (lowercase, hyphens, truncated to 50 chars). `slugify/1` public function.
 
-### Step 74: Implement `create_stacked_branch/3`
+### Step 74: Implement `create_stacked_branch/3` ✅
 For subtask at position N > 1: checkout the branch from position N-1, then create new branch. This builds the stack.
 
-### Step 75: Implement `has_changes?/1`
+### Step 75: Implement `has_changes?/1` ✅
 `git -C <workspace> status --porcelain` — return true if any changes.
 
-### Step 76: Implement `changed_files/1`
-`git -C <workspace> diff --name-only` — return list of changed file paths.
+### Step 76: Implement `changed_files/1` ✅
+`git -C <workspace> status --porcelain` — return list of changed file paths (handles modified, new, deleted, renamed).
 
-### Step 77: Implement `stage_and_commit/3`
-```bash
-git -C <workspace> add -A
-git -C <workspace> commit -m "<message>"
-```
-Return `{:ok, commit_sha}` or `{:error, reason}`.
+### Step 77: Implement `stage_and_commit/2` ✅
+`git add -A` + `git commit -m` + `git rev-parse HEAD`. Returns `{:ok, commit_sha}` or `{:error, :nothing_to_commit}`.
 
-### Step 78: Implement `push/2`
-`git -C <workspace> push -u origin <branch_name>` — push branch to remote.
+### Step 78: Implement `push/2` ✅
+`git -C <workspace> push -u origin <branch_name>`. Also `force_push/2` with `--force-with-lease`.
 
-### Step 79: Implement `create_pr/4`
-```bash
-gh pr create --repo <repo> --head <branch> --base <base_branch> --title "<title>" --body "<body>"
-```
-Return `{:ok, %{url: url, number: number}}`. Base branch is `main` for first subtask, previous subtask's branch for subsequent.
+### Step 79: Implement `create_pr/4` ✅
+`lib/symphony_v2/git_ops/github.ex` — separated into `GitOps.GitHub` module. Uses `gh pr create` with `--repo`, `--head`, `--base`, `--title`, `--body` options. Returns `{:ok, %{url: url, number: number}}`. Delegated from `GitOps`.
 
-### Step 80: Implement `rebase_onto/2`
-`git -C <workspace> rebase <target>` — rebase current branch. Return `{:ok}` or `{:error, :conflict}`.
+### Step 80: Implement `rebase_onto/2` ✅
+`git -C <workspace> rebase <target>`. On failure, aborts rebase and returns `{:error, :conflict}`.
 
-### Step 81: Implement `rebase_stack_onto_main/2`
-For the full stack: checkout each branch bottom-up, rebase onto main (first) or onto the rebased previous branch (subsequent). If any rebase fails, abort and return conflict info.
+### Step 81: Implement `rebase_stack_onto_main/2` ✅
+Recursive: checkout each branch bottom-up, rebase onto main (first) or onto the rebased previous branch (subsequent). Returns `{:error, {:conflict, branch_name}}` on failure.
 
-### Step 82: Implement `merge_stack/2`
-Merge each PR bottom-up via `gh pr merge <number> --merge`. After each merge, the next PR's base is now main. Return list of merged PR URLs.
+### Step 82: Implement `merge_stack/2` ✅
+`lib/symphony_v2/git_ops/github.ex` — `merge_pr/2` and `merge_stack/2`. Merges PRs bottom-up via `gh pr merge`. Returns `{:ok, [merged_numbers]}` or `{:error, {:merge_failed_at, number, reason}}`.
+
+Additional: `diff/3`, `diff_stat/3`, `diff_name_only/3`, `reset_hard/1`, `clean/1` utility functions.
 
 ---
 
-## Phase 10: Git Operations Testing (Steps 83–86)
+## Phase 10: Git Operations Testing (Steps 83–86) ✅ DONE
 
-### Step 83: Write unit tests for branch naming
-Verify slug generation, truncation, special character handling.
+### Step 83: Write unit tests for branch naming ✅
+`test/symphony_v2/git_ops_test.exs` — 10 tests for `branch_name/3` and `slugify/1`: generation, special characters, truncation, trailing hyphen prevention, unicode, empty strings.
 
-### Step 84: Create test helper for temp git repos
-Helper that creates a temp directory, initializes a git repo with an initial commit, and optionally sets up a bare remote for push testing.
+### Step 84: Create test helper for temp git repos ✅
+`test/support/git_test_helper.ex` — `init_temp_repo/1` (basic repo), `init_temp_repo_with_remote/1` (with bare remote for push testing), `write_and_commit/4`, `git!/2` helper.
 
-### Step 85: Write integration tests for basic git operations
-create_branch, has_changes, stage_and_commit, changed_files — all against a real temp git repo.
+### Step 85: Write integration tests for basic git operations ✅
+Tests for: `current_branch`, `checkout_main`, `checkout`, `create_branch`, `has_changes?`, `changed_files`, `stage_and_commit`, `push`, `force_push`, `diff`, `diff_stat`, `diff_name_only`, `reset_hard`, `clean` — all against real temp git repos.
 
-### Step 86: Write integration tests for stacked branch workflow
-Create a stack of 3 branches, verify each branches from the previous, verify rebase_stack_onto_main works.
+### Step 86: Write integration tests for stacked branch workflow ✅
+Create a stack of 3 branches with incremental work, verify file isolation per branch, verify `rebase_stack_onto_main` works cleanly and handles conflicts correctly. 328 tests total, 0 failures. Coverage 90.13%. Full quality gate passes (compile, format, credo strict, dialyzer).
 
 ---
 
@@ -927,8 +922,8 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 6. Safehouse Integration | 42–48 | ✅ CLI command builder for sandboxed agents |
 | 7. Agent Execution Engine | 49–60 | ✅ GenServer wrapping CLI processes |
 | 8. Workspace Management | 61–68 | ✅ Per-task directory lifecycle |
-| 9. Git Operations | 69–82 | Branch, commit, push, PR, stack management |
-| 10. Git Testing | 83–86 | Integration tests for git operations |
+| 9. Git Operations | 69–82 | ✅ Branch, commit, push, PR, stack management |
+| 10. Git Testing | 83–86 | ✅ Integration tests for git operations |
 | 11. Test Runner | 87–92 | Execute test commands, capture results |
 | 12. Planning Agent | 93–104 | Plan file format, parsing, planning flow |
 | 13. Review Agent | 105–114 | Review file format, parsing, review flow |

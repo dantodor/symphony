@@ -29,7 +29,18 @@ defmodule SymphonyV2.MixProject do
           SymphonyV2Web.Telemetry,
           SymphonyV2.Application,
           SymphonyV2.Repo,
-          SymphonyV2.Mailer
+          SymphonyV2.Mailer,
+          # GitHub CLI integration — requires real gh auth to test
+          SymphonyV2.GitOps.GitHub,
+          # Thin wrapper — 0-arity functions delegate to __MODULE__ singleton
+          SymphonyV2.Agents.AgentSupervisor,
+          # Test fixtures and helpers — not application code
+          SymphonyV2.AccountsFixtures,
+          SymphonyV2.TasksFixtures,
+          SymphonyV2.PlansFixtures,
+          SymphonyV2.GitTestHelper,
+          SymphonyV2.DataCase,
+          SymphonyV2Web.ConnCase
         ]
       ]
     ]

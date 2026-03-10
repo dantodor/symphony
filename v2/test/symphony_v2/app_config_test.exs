@@ -197,6 +197,20 @@ defmodule SymphonyV2.AppConfigTest do
       assert {:error, errors} = AppConfig.validate(config)
       assert length(errors) >= 4
     end
+
+    test "returns error when workspace_root is not writable", %{repo_path: repo_path} do
+      ro_dir = Path.join(System.tmp_dir!(), "symphony_ro_#{:rand.uniform(100_000)}")
+      File.mkdir_p!(ro_dir)
+      File.chmod!(ro_dir, 0o444)
+
+      config = %AppConfig{repo_path: repo_path, workspace_root: ro_dir}
+      assert {:error, errors} = AppConfig.validate(config)
+      assert Enum.any?(errors, &String.contains?(&1, "not writable"))
+
+      # Cleanup
+      File.chmod!(ro_dir, 0o755)
+      File.rm_rf!(ro_dir)
+    end
   end
 
   describe "load_and_validate/0" do

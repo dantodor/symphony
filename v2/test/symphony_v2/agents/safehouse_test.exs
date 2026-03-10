@@ -222,6 +222,11 @@ defmodule SymphonyV2.Agents.SafehouseTest do
       assert {:ok, _} =
                Safehouse.build_command(:claude_code, "/workspace/../other", prompt: "Do it")
     end
+
+    test "rejects non-string workspace path" do
+      assert {:error, msg} = Safehouse.build_command(:claude_code, 123, prompt: "Do it")
+      assert msg =~ "invalid path type"
+    end
   end
 
   describe "build_command_list/3" do

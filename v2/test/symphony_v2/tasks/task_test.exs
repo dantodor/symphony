@@ -154,4 +154,26 @@ defmodule SymphonyV2.Tasks.TaskTest do
       assert length(statuses) == 7
     end
   end
+
+  describe "queue_changeset/2" do
+    test "sets queue_position" do
+      task = %Task{}
+      changeset = Task.queue_changeset(task, %{queue_position: 5})
+      assert changeset.valid?
+      assert get_change(changeset, :queue_position) == 5
+    end
+
+    test "allows nil queue_position" do
+      task = %Task{queue_position: 3}
+      changeset = Task.queue_changeset(task, %{queue_position: nil})
+      assert changeset.valid?
+    end
+
+    test "updates existing queue_position" do
+      task = %Task{queue_position: 1}
+      changeset = Task.queue_changeset(task, %{queue_position: 10})
+      assert changeset.valid?
+      assert get_change(changeset, :queue_position) == 10
+    end
+  end
 end
