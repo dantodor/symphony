@@ -22,7 +22,7 @@ defmodule SymphonyV2.Tasks.TaskState do
     "planning" => ["plan_review", "failed"],
     "plan_review" => ["executing", "planning"],
     "executing" => ["completed", "failed"],
-    "failed" => ["draft"],
+    "failed" => ["draft", "executing"],
     "completed" => []
   }
 

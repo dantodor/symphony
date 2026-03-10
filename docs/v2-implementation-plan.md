@@ -639,7 +639,7 @@ Edits update the database immediately on form submission. Plan reloads from DB a
 
 ---
 
-## Phase 17: Execution Monitoring Dashboard (Steps 166–179)
+## Phase 17: Execution Monitoring Dashboard (Steps 166–179) ✅ DONE
 
 ### Step 166: Create DashboardLive
 `lib/symphony_v2_web/live/dashboard_live.ex` — main monitoring page.

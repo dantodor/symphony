@@ -14,7 +14,7 @@ defmodule SymphonyV2.Plans.Subtask do
 
   @statuses ~w(pending dispatched running testing in_review succeeded failed)
   @agent_types ~w(claude_code codex gemini_cli opencode)
-  @review_verdicts ~w(approved rejected)
+  @review_verdicts ~w(approved rejected skipped)
 
   schema "subtasks" do
     field :position, :integer

@@ -64,6 +64,7 @@ defmodule SymphonyV2Web.Router do
     scope "/", SymphonyV2Web do
       pipe_through [:browser]
 
+      live "/dashboard", DashboardLive, :index
       live "/tasks", TaskLive.Index, :index
       live "/tasks/new", TaskLive.New, :new
       live "/tasks/:id", TaskLive.Show, :show

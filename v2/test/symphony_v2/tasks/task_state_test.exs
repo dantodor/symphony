@@ -87,7 +87,7 @@ defmodule SymphonyV2.Tasks.TaskStateTest do
       assert TaskState.valid_next_statuses("planning") == ["plan_review", "failed"]
       assert TaskState.valid_next_statuses("plan_review") == ["executing", "planning"]
       assert TaskState.valid_next_statuses("executing") == ["completed", "failed"]
-      assert TaskState.valid_next_statuses("failed") == ["draft"]
+      assert TaskState.valid_next_statuses("failed") == ["draft", "executing"]
       assert TaskState.valid_next_statuses("completed") == []
     end
 

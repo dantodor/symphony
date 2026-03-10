@@ -286,6 +286,16 @@ defmodule SymphonyV2.Plans do
 
   # --- Agent Runs ---
 
+  @doc "Returns the latest agent run for a given subtask ID."
+  @spec latest_agent_run_for_subtask(Ecto.UUID.t()) :: %AgentRun{} | nil
+  def latest_agent_run_for_subtask(subtask_id) do
+    AgentRun
+    |> where([a], a.subtask_id == ^subtask_id)
+    |> order_by([a], desc: a.inserted_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
   @doc "Creates a new agent run for a subtask."
   @spec create_agent_run(map()) :: {:ok, %AgentRun{}} | {:error, Ecto.Changeset.t()}
   def create_agent_run(attrs) do

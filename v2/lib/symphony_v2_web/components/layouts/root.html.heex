@@ -38,6 +38,9 @@
       <div class="flex-none">
         <ul class="menu menu-horizontal px-1 items-center gap-1">
           <%= if @current_scope do %>
+            <li>
+              <.link navigate={~p"/dashboard"} class="btn btn-ghost btn-sm">Dashboard</.link>
+            </li>
             <li><.link navigate={~p"/tasks"} class="btn btn-ghost btn-sm">Tasks</.link></li>
             <li>
               <span class="text-sm opacity-70">{@current_scope.user.email}</span>

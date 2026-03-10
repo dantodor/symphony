@@ -38,7 +38,8 @@ defmodule SymphonyV2.Pipeline do
           current_subtask_id: Ecto.UUID.t() | nil,
           current_step: step(),
           workspace: String.t() | nil,
-          config: AppConfig.t() | nil
+          config: AppConfig.t() | nil,
+          paused: boolean()
         }
 
   # --- Public API ---
@@ -79,6 +80,24 @@ defmodule SymphonyV2.Pipeline do
     GenServer.call(server, :get_state)
   end
 
+  @doc "Pause the pipeline. Stops after the current subtask completes."
+  @spec pause(GenServer.server()) :: :ok
+  def pause(server \\ __MODULE__) do
+    GenServer.cast(server, :pause)
+  end
+
+  @doc "Resume a paused pipeline."
+  @spec resume(GenServer.server()) :: :ok
+  def resume(server \\ __MODULE__) do
+    GenServer.cast(server, :resume)
+  end
+
+  @doc "Retry a failed task from its failed subtask."
+  @spec retry_task(GenServer.server()) :: :ok | {:error, term()}
+  def retry_task(server \\ __MODULE__) do
+    GenServer.call(server, :retry_task)
+  end
+
   # --- GenServer callbacks ---
 
   @impl true
@@ -91,7 +110,8 @@ defmodule SymphonyV2.Pipeline do
       current_subtask_id: nil,
       current_step: nil,
       workspace: nil,
-      config: config
+      config: config,
+      paused: false
     }
 
     # Recover from DB on startup
@@ -115,6 +135,29 @@ defmodule SymphonyV2.Pipeline do
         {:noreply, state}
     end
   end
+
+  def handle_cast(:pause, %{status: :processing} = state) do
+    Logger.info("Pipeline paused", task_id: state.current_task_id)
+    broadcast(:pipeline, {:pipeline_paused, state.current_task_id})
+    {:noreply, %{state | paused: true}}
+  end
+
+  def handle_cast(:pause, state), do: {:noreply, state}
+
+  def handle_cast(:resume, %{paused: true} = state) do
+    Logger.info("Pipeline resumed", task_id: state.current_task_id)
+    broadcast(:pipeline, {:pipeline_resumed, state.current_task_id})
+    state = %{state | paused: false}
+
+    # If we were paused between subtasks, continue execution
+    if state.status == :processing and state.current_step == :executing_subtask do
+      send(self(), {:continue, :execute_next_subtask})
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_cast(:resume, state), do: {:noreply, state}
 
   @impl true
   def handle_call(:approve_plan, _from, %{current_step: :awaiting_plan_review} = state) do
@@ -142,6 +185,27 @@ defmodule SymphonyV2.Pipeline do
 
   def handle_call(:approve_final, _from, state) do
     {:reply, {:error, :not_awaiting_final_review}, state}
+  end
+
+  def handle_call(:retry_task, _from, %{status: :idle} = state) do
+    # Find the most recent failed task and retry it
+    case Tasks.list_tasks_by_status("failed") do
+      [task | _] ->
+        new_state = do_retry_task(task, state)
+
+        if new_state.status == :processing do
+          {:reply, :ok, new_state}
+        else
+          {:reply, {:error, :retry_failed}, state}
+        end
+
+      [] ->
+        {:reply, {:error, :no_failed_task}, state}
+    end
+  end
+
+  def handle_call(:retry_task, _from, state) do
+    {:reply, {:error, :pipeline_busy}, state}
   end
 
   def handle_call(:get_state, _from, state) do
@@ -252,6 +316,12 @@ defmodule SymphonyV2.Pipeline do
   end
 
   # --- Subtask execution ---
+
+  defp execute_next_subtask(%{paused: true} = state) do
+    Logger.info("Pipeline paused, waiting for resume", task_id: state.current_task_id)
+    broadcast(:task, state.current_task_id, {:task_step, :paused})
+    state
+  end
 
   defp execute_next_subtask(state) do
     plan = Plans.get_plan_by_task_id(state.current_task_id)
@@ -684,7 +754,73 @@ defmodule SymphonyV2.Pipeline do
     idle_state
   end
 
+  # --- Retry failed task ---
+
+  defp do_retry_task(task, state) do
+    Logger.info("Retrying failed task", task_id: task.id)
+
+    config = state.config
+
+    # Reset the task to executing (failed -> executing is a valid transition for retry)
+    with {:ok, task} <- Tasks.update_task_status(task, "executing"),
+         {:ok, workspace} <- resolve_workspace(config, task.id) do
+      broadcast(:pipeline, {:pipeline_started, task.id})
+      reset_failed_subtasks(task.id)
+
+      state = %{
+        state
+        | status: :processing,
+          current_task_id: task.id,
+          current_step: :executing_subtask,
+          workspace: workspace,
+          paused: false
+      }
+
+      broadcast(:task, task.id, {:task_step, :executing_subtask})
+      send(self(), {:continue, :execute_next_subtask})
+      state
+    else
+      {:error, reason} ->
+        Logger.error("Failed to retry task", task_id: task.id, reason: inspect(reason))
+        state
+    end
+  end
+
+  defp reset_failed_subtasks(task_id) do
+    plan = Plans.get_plan_by_task_id(task_id)
+
+    if plan do
+      plan.subtasks
+      |> Enum.filter(&(&1.status == "failed"))
+      |> Enum.each(fn subtask ->
+        Plans.update_subtask(subtask, %{
+          status: "pending",
+          last_error: nil,
+          retry_count: 0,
+          review_verdict: nil,
+          review_reasoning: nil,
+          test_passed: nil,
+          test_output: nil
+        })
+      end)
+
+      Plans.update_plan_status(plan, "executing")
+    end
+  end
+
   # --- Helpers ---
+
+  defp resolve_workspace(%{workspace_root: nil}, _task_id), do: {:error, :no_workspace_root}
+
+  defp resolve_workspace(config, task_id) do
+    workspace_path = Workspace.workspace_path(config.workspace_root, task_id) |> Path.expand()
+
+    if File.dir?(workspace_path) do
+      {:ok, workspace_path}
+    else
+      {:error, :workspace_not_found}
+    end
+  end
 
   defp ensure_workspace(config, task_id) do
     if Workspace.exists?(config.workspace_root, task_id) do
@@ -804,7 +940,8 @@ defmodule SymphonyV2.Pipeline do
         current_task_id: nil,
         current_subtask_id: nil,
         current_step: nil,
-        workspace: nil
+        workspace: nil,
+        paused: false
     }
   end
 

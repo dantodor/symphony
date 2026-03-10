@@ -95,6 +95,16 @@ defmodule SymphonyV2.Tasks do
     Task.create_changeset(task, attrs)
   end
 
+  @doc "Lists tasks in the queue (planning status), ordered by queue position."
+  @spec list_queued_tasks() :: [%Task{}]
+  def list_queued_tasks do
+    Task
+    |> where([t], t.status in ~w(draft awaiting_review planning))
+    |> order_by([t], asc_nulls_last: t.queue_position, asc: t.inserted_at)
+    |> Repo.all()
+    |> Repo.preload(:creator)
+  end
+
   @doc "Returns the next task ready for processing, ordered by queue position."
   @spec next_queued_task() :: %Task{} | nil
   def next_queued_task do
