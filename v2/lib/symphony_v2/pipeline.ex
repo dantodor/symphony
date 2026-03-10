@@ -74,6 +74,12 @@ defmodule SymphonyV2.Pipeline do
     GenServer.call(server, :approve_final)
   end
 
+  @doc "Reject the final review with feedback. Fails the task."
+  @spec reject_final(String.t(), GenServer.server()) :: :ok | {:error, term()}
+  def reject_final(feedback, server \\ __MODULE__) do
+    GenServer.call(server, {:reject_final, feedback})
+  end
+
   @doc "Get the current pipeline state."
   @spec get_state(GenServer.server()) :: state()
   def get_state(server \\ __MODULE__) do
@@ -184,6 +190,19 @@ defmodule SymphonyV2.Pipeline do
   end
 
   def handle_call(:approve_final, _from, state) do
+    {:reply, {:error, :not_awaiting_final_review}, state}
+  end
+
+  def handle_call(
+        {:reject_final, feedback},
+        _from,
+        %{current_step: :awaiting_final_review} = state
+      ) do
+    state = do_reject_final(state, feedback)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:reject_final, _feedback}, _from, state) do
     {:reply, {:error, :not_awaiting_final_review}, state}
   end
 
@@ -668,6 +687,11 @@ defmodule SymphonyV2.Pipeline do
 
   defp do_approve_final(state) do
     do_merge(state)
+  end
+
+  defp do_reject_final(state, feedback) do
+    Logger.info("Final review rejected", task_id: state.current_task_id, feedback: feedback)
+    fail_current_task(state, "Final review rejected: #{feedback}")
   end
 
   defp do_merge(state) do

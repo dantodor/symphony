@@ -324,7 +324,9 @@ defmodule SymphonyV2Web.TaskLive.Show do
     <div :if={@task.status == "executing" && @plan && all_subtasks_done?(@plan)} class="mt-6">
       <div class="alert alert-info">
         <span>All subtasks completed. Awaiting final review.</span>
-        <.button phx-click="approve_final" variant="primary">Approve & Merge</.button>
+        <.link navigate={~p"/tasks/#{@task}/stack-review"} class="btn btn-primary btn-sm">
+          Review PR Stack
+        </.link>
       </div>
     </div>
 

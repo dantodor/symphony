@@ -312,6 +312,30 @@ defmodule SymphonyV2.PipelineTest do
     end
   end
 
+  describe "reject_final/2" do
+    @tag :tmp_dir
+    test "returns error when idle", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_pid, name} = start_pipeline(config)
+
+      assert {:error, :not_awaiting_final_review} = Pipeline.reject_final("bad code", name)
+    end
+
+    @tag :tmp_dir
+    test "returns error when in executing step", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      _ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      {_pid, name} = start_pipeline(config)
+
+      assert {:error, :not_awaiting_final_review} = Pipeline.reject_final("bad code", name)
+    end
+  end
+
   describe "get_state/1" do
     @tag :tmp_dir
     test "returns pipeline state without config", %{tmp_dir: tmp_dir} do

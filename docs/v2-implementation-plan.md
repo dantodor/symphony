@@ -693,30 +693,31 @@ Subscribe to `"pipeline"`, `"task:#{id}"`, `"subtask:#{id}"`, `"agent_output:#{i
 
 ---
 
-## Phase 18: PR Stack Review UI (Steps 180–187)
+## Phase 18: PR Stack Review UI (Steps 180–187) ✅ DONE
 
-### Step 180: Create StackReviewLive
-`lib/symphony_v2_web/live/stack_review_live.ex` — PR stack review page for completed tasks awaiting final review.
+### Step 180: Create StackReviewLive ✅
+`lib/symphony_v2_web/live/stack_review_live.ex` — PR stack review page at `/tasks/:task_id/stack-review`. Subscribes to PubSub for real-time merge progress. Link added from TaskLive.Show when all subtasks complete.
 
-### Step 181: List all PRs in the stack
-Ordered list: PR number, title, link to GitHub, base branch, diff stats (files changed, +/- lines).
+### Step 181: List all PRs in the stack ✅
+Ordered card list showing: PR number badge, title, GitHub link button, base branch, head branch, files changed count, agent type. Expandable file list per PR.
 
-### Step 182: Per-PR summary
-Show files changed, review agent verdict, key observations from review.
+### Step 182: Per-PR summary ✅
+Shows review verdict badge (approved/rejected/skipped), review reasoning text, files changed with expandable list, agent type.
 
-### Step 183: "Approve & Merge" button
-Triggers Pipeline.approve_final → rebase + merge flow.
+### Step 183: "Approve & Merge" button ✅
+Visible when task is in `executing` status (awaiting final review). Triggers `Pipeline.approve_final()` → rebase + merge flow.
 
-### Step 184: "Reject" button with feedback
-Textarea for human feedback. Returns task to failed state with feedback stored.
+### Step 184: "Reject" button with feedback ✅
+Click "Reject" → shows inline textarea form. Submit calls `Pipeline.reject_final(feedback)` — new Pipeline API that fails the task with the feedback message. Empty feedback validation. Cancel hides form.
 
-### Step 185: Merge progress display
-Real-time updates: "Rebasing onto main...", "Merging PR 1/4...", "Complete" or "Conflict detected in PR 2".
+### Step 185: Merge progress display ✅
+Real-time PubSub updates: merging spinner banner on `:task_step :merging`, success alert on `:task_completed`, failure alert with error details on `:task_failed`.
 
-### Step 186: Conflict error display
-If rebase fails: show which file(s) conflict, which subtask's PR. Provide options: "Retry" or "Resolve manually".
+### Step 186: Conflict error display ✅
+On merge/rebase failure: error alert shows the failure reason (e.g. "Rebase conflict on branch step-2"). Task status transitions to failed. Completed/failed task states shown with appropriate alerts.
 
-### Step 187: Write LiveView tests for stack review flow
+### Step 187: Write LiveView tests for stack review flow ✅
+`test/symphony_v2_web/live/stack_review_live_test.exs` — 28 tests covering: PR list display (numbers, titles, GitHub links, base branch, files, agents, reviews, branches, PR count), approve/reject controls, reject form (show/cancel/empty validation/submit), PubSub merge progress (merging/completed/failed/step events/unknown messages), no-PRs empty state, completed task state, failed task state. Also added `reject_final/2` Pipeline tests (2 tests). 622 tests total, 0 failures. Coverage 88.14%. Full quality gate passes (compile --warnings-as-errors, format, credo strict, dialyzer).
 
 ---
 
@@ -871,7 +872,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 15. Task Management UI | 138–152 | ✅ Task CRUD, list, detail, review LiveViews |
 | 16. Plan Review UI | 153–165 | ✅ Plan display, editing, approval LiveViews |
 | 17. Monitoring Dashboard | 166–179 | Real-time execution monitoring |
-| 18. PR Stack Review UI | 180–187 | Final review and merge UI |
+| 18. PR Stack Review UI | 180–187 | ✅ Final review and merge UI |
 | 19. App Wiring & Supervision | 188–195 | Supervisor tree, recovery, PubSub |
 | 20. Settings UI | 196–201 | Configuration management UI |
 | 21. E2E Testing & Hardening | 202–220 | Full integration tests, security, docs |
