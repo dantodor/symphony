@@ -31,12 +31,21 @@ defmodule SymphonyV2.AppConfig do
             agent_timeout_ms: 600_000,
             max_retries: 2
 
-  @doc "Loads the application configuration from the application environment."
+  @doc """
+  Loads the application configuration.
+
+  Merges values from three sources (later sources override earlier):
+  1. Struct defaults
+  2. Application environment (`config/*.exs`)
+  3. Database settings (if available)
+
+  Paths (repo_path, workspace_root) come only from application env.
+  """
   @spec load() :: t()
   def load do
     config = Application.get_env(:symphony_v2, __MODULE__, [])
 
-    %__MODULE__{
+    base = %__MODULE__{
       repo_path: Keyword.get(config, :repo_path),
       workspace_root: Keyword.get(config, :workspace_root),
       test_command: Keyword.get(config, :test_command, "mix test"),
@@ -47,6 +56,34 @@ defmodule SymphonyV2.AppConfig do
       agent_timeout_ms: Keyword.get(config, :agent_timeout_ms, 600_000),
       max_retries: Keyword.get(config, :max_retries, 2)
     }
+
+    merge_db_settings(base)
+  end
+
+  defp merge_db_settings(base) do
+    case db_settings() do
+      nil -> base
+      setting -> apply_db_overrides(base, setting)
+    end
+  rescue
+    # DB may not be available during migrations or early startup
+    _error -> base
+  end
+
+  @db_override_fields ~w(test_command planning_agent review_agent default_agent
+                          dangerously_skip_permissions agent_timeout_ms max_retries)a
+
+  defp apply_db_overrides(base, setting) do
+    Enum.reduce(@db_override_fields, base, fn field, acc ->
+      case Map.get(setting, field) do
+        nil -> acc
+        value -> Map.put(acc, field, value)
+      end
+    end)
+  end
+
+  defp db_settings do
+    SymphonyV2.Repo.one(SymphonyV2.Settings.AppSetting)
   end
 
   @doc """

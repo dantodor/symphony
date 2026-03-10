@@ -70,6 +70,7 @@ defmodule SymphonyV2Web.Router do
       live "/tasks/:id", TaskLive.Show, :show
       live "/tasks/:task_id/plan", PlanLive.Show, :show
       live "/tasks/:task_id/stack-review", StackReviewLive, :show
+      live "/app-settings", SettingsLive, :index
     end
   end
 end

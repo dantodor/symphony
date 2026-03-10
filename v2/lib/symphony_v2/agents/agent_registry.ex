@@ -124,9 +124,13 @@ defmodule SymphonyV2.Agents.AgentRegistry do
   @spec builtin_agents() :: [AgentDef.t()]
   def builtin_agents, do: @builtin_agents
 
-  @doc "Returns custom agents loaded from application configuration."
+  @doc "Returns custom agents loaded from application configuration and database."
   @spec custom_agents() :: [AgentDef.t()]
   def custom_agents do
+    config_agents() ++ db_agents()
+  end
+
+  defp config_agents do
     config = Application.get_env(:symphony_v2, __MODULE__, [])
     raw_agents = Keyword.get(config, :custom_agents, [])
 
@@ -136,5 +140,21 @@ defmodule SymphonyV2.Agents.AgentRegistry do
       {:ok, agent} -> [agent]
       {:error, _} -> []
     end)
+  end
+
+  defp db_agents do
+    SymphonyV2.Settings.list_custom_agents()
+    |> Enum.map(fn ca ->
+      %AgentDef{
+        name: String.to_atom(ca.name),
+        command: ca.command,
+        prompt_flag: ca.prompt_flag,
+        skip_permissions_flag: ca.skip_permissions_flag,
+        env_vars: ca.env_vars || []
+      }
+    end)
+  rescue
+    # DB may not be available during migrations or early startup
+    _error -> []
   end
 end

@@ -752,24 +752,25 @@ Pipeline `terminate/2` logs shutdown context (reason, status, task_id, step). St
 
 ---
 
-## Phase 20: Settings UI (Steps 196–201)
+## Phase 20: Settings UI (Steps 196–201) ✅ DONE
 
-### Step 196: Create SettingsLive
-`lib/symphony_v2_web/live/settings_live.ex` — view current application configuration.
+### Step 196: Create SettingsLive ✅
+`lib/symphony_v2_web/live/settings_live.ex` — LiveView at `/app-settings` showing current configuration and agent registry. Added route, nav link in root layout.
 
-### Step 197: Display current config
-Show: repo path, workspace root, test command, planning agent, review agent, default agent, max retries, timeout, dangerously-skip-permissions toggle.
+### Step 197: Display current config ✅
+Table showing: repo path (with valid/invalid badge), workspace root (with valid/invalid badge), test command, planning agent, review agent, default agent, max retries, timeout (formatted as min/sec), dangerously-skip-permissions (enabled/disabled badge).
 
-### Step 198: Display agent registry
-Table of configured agents: name, CLI command, skip-permissions flag, required env vars, installed status.
+### Step 198: Display agent registry ✅
+Table of all agents (built-in + custom) showing: name, CLI command, prompt flag, skip-permissions flag, env vars (as badges), installed status (via `System.find_executable`), source (built-in/custom). Edit/delete buttons for custom agents.
 
-### Step 199: Implement config editing
-Allow editing test command, default agents, max retries, timeout, dangerously-skip-permissions. Persist to database or config file.
+### Step 199: Implement config editing ✅
+Inline edit form with real-time validation. Editable fields: test_command, planning/review/default agent (select dropdowns from AgentRegistry), agent_timeout_ms, max_retries, dangerously_skip_permissions (checkbox). Persisted to `app_settings` database table (singleton row). `AppConfig.load/0` merges DB settings over application env defaults. Migration: `20260310051120_create_app_settings.exs`.
 
-### Step 200: Implement agent management
-Add/remove/edit agent configurations. Validate that the CLI command exists on the system.
+### Step 200: Implement agent management ✅
+Add/edit/delete custom agents via inline forms. Fields: name (validated lowercase with underscores), command, prompt_flag, skip_permissions_flag (optional), env_vars (comma-separated input). Persisted to `custom_agents` database table. `AgentRegistry.custom_agents/0` loads from both application config and DB. Unique name constraint enforced. Schemas: `SymphonyV2.Settings.AppSetting`, `SymphonyV2.Settings.CustomAgent`. Context: `SymphonyV2.Settings`.
 
-### Step 201: Write tests for settings page
+### Step 201: Write tests for settings page ✅
+`test/symphony_v2/settings_test.exs` — 18 tests: get_settings defaults, update with all fields, validation (timeout, retries, agent types), changeset, custom agent CRUD (create, create with all fields, required fields, name format, unique name, get, update, delete, list), command_installed?. `test/symphony_v2_web/live/settings_live_test.exs` — 23 tests: page rendering, config display, agent registry table (built-in agents, details, installed status, source labels), settings editing (form show/cancel, validation, save, DB persistence), agent management (add form show/cancel, create, validate, delete button, delete, edit button, edit), navigation. 684 tests total, 0 failures. Coverage 88.66%. Full quality gate passes (compile --warnings-as-errors, format, credo strict, dialyzer).
 
 ---
 
@@ -859,7 +860,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 17. Monitoring Dashboard | 166–179 | Real-time execution monitoring |
 | 18. PR Stack Review UI | 180–187 | ✅ Final review and merge UI |
 | 19. App Wiring & Supervision | 188–195 | ✅ Supervisor tree, recovery, PubSub |
-| 20. Settings UI | 196–201 | Configuration management UI |
+| 20. Settings UI | 196–201 | ✅ Configuration management UI |
 | 21. E2E Testing & Hardening | 202–220 | Full integration tests, security, docs |
 
 **Total: 220 discrete implementation steps across 21 phases.**
