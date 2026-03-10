@@ -596,43 +596,46 @@ TaskLive.Index shows queue position column for all tasks. Queue position display
 
 ---
 
-## Phase 16: Plan Review & Editing UI (Steps 153–165)
+## Phase 16: Plan Review & Editing UI (Steps 153–165) ✅ DONE
 
-### Step 153: Create PlanLive.Show
-`lib/symphony_v2_web/live/plan_live/show.ex` — display execution plan for a task.
+### Step 153: Create PlanLive.Show ✅
+`lib/symphony_v2_web/live/plan_live/show.ex` — display execution plan for a task at `/tasks/:task_id/plan`. Shows subtask list, approve/reject buttons, and inline editing when plan is in review.
 
-### Step 154: Render subtask list
-Ordered list showing: position, title, spec (truncated, expandable), agent type badge, status.
+### Step 154: Render subtask list ✅
+Ordered card list showing: position badge, title, spec (full text), agent type badge, status badge. Edit/move/delete controls visible during plan_review.
 
-### Step 155: Add "Approve Plan" button
-Visible when plan status is `awaiting_review`. Triggers Pipeline.approve_plan.
+### Step 155: Add "Approve Plan" button ✅
+Visible when task status is `plan_review`. Triggers `Pipeline.approve_plan()`.
 
-### Step 156: Add "Reject & Re-plan" button
-Returns task to planning state for another planning agent attempt.
+### Step 156: Add "Reject & Re-plan" button ✅
+Visible when task status is `plan_review`. Triggers `Pipeline.reject_plan()` to re-run planning.
 
-### Step 157: Implement subtask spec editing
-Click on a subtask → expand inline editor for the spec text. Save updates to database.
+### Step 157: Implement subtask spec editing ✅
+Click edit button → inline form with title, spec (textarea), and agent type (dropdown). `Subtask.edit_changeset/2` validates title, spec, agent_type. `Plans.update_subtask_plan_fields/2` persists changes. Real-time validation via `phx-change`.
 
-### Step 158: Implement agent type reassignment
-Dropdown per subtask to change agent type. Options populated from AgentRegistry.
+### Step 158: Implement agent type reassignment ✅
+Select dropdown per subtask populated from `AgentRegistry.agent_type_strings/0`. Saved via edit form submission.
 
-### Step 159: Implement subtask reordering
-Up/down arrow buttons to move subtasks. Update position fields in database.
+### Step 159: Implement subtask reordering ✅
+Up/down arrow buttons swap positions via `Plans.move_subtask_up/1` and `Plans.move_subtask_down/1`. Uses temporary position (-1) to avoid unique constraint violations during swap. First/last position guards return `{:error, :already_first/:already_last}`.
 
-### Step 160: Implement add subtask
-"Add subtask" button → inline form at specified position. Resequence subsequent positions.
+### Step 160: Implement add subtask ✅
+"Add Subtask" button shows inline form at end of list. `Plans.add_subtask_to_plan/2` inserts at position and resequences subsequent subtasks via `Ecto.Multi`. Normalizes mixed string/atom keys for Ecto compatibility.
 
-### Step 161: Implement remove subtask
-Delete button per subtask (with confirmation). Resequence remaining positions.
+### Step 161: Implement remove subtask ✅
+Delete button per subtask with `data-confirm` browser confirmation. `Plans.delete_subtask/1` removes and resequences remaining subtasks via `Ecto.Multi`.
 
-### Step 162: Save all plan edits
-Edits update the database immediately (or batch save with a "Save changes" button).
+### Step 162: Save all plan edits ✅
+Edits update the database immediately on form submission. Plan reloads from DB after each operation to reflect current state.
 
-### Step 163: Write LiveView test for plan display
+### Step 163: Write LiveView test for plan display ✅
+5 tests: subtask display with positions/agents/specs, no-plan message, spec content, status badges, back-to-task link. 2 tests for approve/reject button visibility.
 
-### Step 164: Write LiveView test for subtask editing
+### Step 164: Write LiveView test for subtask editing ✅
+5 tests: edit button visibility, inline form display, save with DB verification, agent type change, cancel returns to view mode. 2 tests for validate_edit and validate_add events.
 
-### Step 165: Write LiveView test for subtask reordering/add/remove
+### Step 165: Write LiveView test for subtask reordering/add/remove ✅
+3 tests for reordering (move buttons, move down swaps, move up swaps). 4 tests for add (button visibility, form display, save with count verification, cancel). 2 tests for delete (button visibility, delete with resequencing). 1 test for no-edit-controls when not in plan_review. 4 tests for PubSub handlers. 8 context-level tests for Plans editing functions. Also fixed pre-existing credo issues in task_live_test.exs (aliased nested modules). 540 tests total, 0 failures. Coverage 91.09%. Full quality gate passes (compile --warnings-as-errors, format, credo strict, dialyzer).
 
 ---
 
@@ -866,7 +869,7 @@ Remove any scaffolding code, ensure all tests pass, run full quality gate (`make
 | 13. Review Agent | 105–114 | ✅ Review file format, parsing, review flow |
 | 14. Execution Pipeline | 115–137 | ✅ Core orchestrator GenServer |
 | 15. Task Management UI | 138–152 | ✅ Task CRUD, list, detail, review LiveViews |
-| 16. Plan Review UI | 153–165 | Plan display, editing, approval LiveViews |
+| 16. Plan Review UI | 153–165 | ✅ Plan display, editing, approval LiveViews |
 | 17. Monitoring Dashboard | 166–179 | Real-time execution monitoring |
 | 18. PR Stack Review UI | 180–187 | Final review and merge UI |
 | 19. App Wiring & Supervision | 188–195 | Supervisor tree, recovery, PubSub |

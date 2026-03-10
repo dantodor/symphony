@@ -128,6 +128,162 @@ defmodule SymphonyV2.Plans do
     total > 0 and total == succeeded
   end
 
+  # --- Plan Editing ---
+
+  @doc "Updates a subtask's plan fields (title, spec, agent_type) during plan review."
+  @spec update_subtask_plan_fields(%Subtask{}, map()) ::
+          {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
+  def update_subtask_plan_fields(subtask, attrs) do
+    subtask
+    |> Subtask.edit_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc "Gets a subtask by ID."
+  @spec get_subtask!(Ecto.UUID.t()) :: %Subtask{}
+  def get_subtask!(id) do
+    Repo.get!(Subtask, id)
+  end
+
+  @doc "Adds a subtask to a plan at the given position, resequencing subsequent subtasks."
+  @spec add_subtask_to_plan(%ExecutionPlan{}, map()) ::
+          {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
+  def add_subtask_to_plan(plan, attrs) do
+    position = Map.get(attrs, :position) || Map.get(attrs, "position")
+
+    # Normalize all keys to atoms for create_changeset
+    normalized_attrs =
+      attrs
+      |> Enum.into(%{}, fn
+        {k, v} when is_binary(k) -> {String.to_existing_atom(k), v}
+        {k, v} -> {k, v}
+      end)
+      |> Map.put(:execution_plan_id, plan.id)
+      |> Map.put(:position, position)
+
+    Ecto.Multi.new()
+    |> Ecto.Multi.run(:resequence, fn repo, _changes ->
+      {count, _} =
+        from(s in Subtask,
+          where: s.execution_plan_id == ^plan.id and s.position >= ^position
+        )
+        |> repo.update_all(inc: [position: 1])
+
+      {:ok, count}
+    end)
+    |> Ecto.Multi.insert(
+      :subtask,
+      Subtask.create_changeset(%Subtask{}, normalized_attrs)
+    )
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{subtask: subtask}} -> {:ok, subtask}
+      {:error, :subtask, changeset, _} -> {:error, changeset}
+      {:error, _step, reason, _} -> {:error, reason}
+    end
+  end
+
+  @doc "Deletes a subtask and resequences remaining subtasks."
+  @spec delete_subtask(%Subtask{}) :: {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
+  def delete_subtask(subtask) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.delete(:delete, subtask)
+    |> Ecto.Multi.run(:resequence, fn repo, _changes ->
+      {count, _} =
+        from(s in Subtask,
+          where:
+            s.execution_plan_id == ^subtask.execution_plan_id and
+              s.position > ^subtask.position
+        )
+        |> repo.update_all(inc: [position: -1])
+
+      {:ok, count}
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{delete: deleted}} -> {:ok, deleted}
+      {:error, _step, reason, _} -> {:error, reason}
+    end
+  end
+
+  @doc "Moves a subtask up (decreases position by 1) by swapping with the subtask above."
+  @spec move_subtask_up(%Subtask{}) :: :ok | {:error, :already_first}
+  def move_subtask_up(%Subtask{position: 1}), do: {:error, :already_first}
+
+  def move_subtask_up(subtask) do
+    swap_subtask_positions(subtask, subtask.position - 1)
+  end
+
+  @doc "Moves a subtask down (increases position by 1) by swapping with the subtask below."
+  @spec move_subtask_down(%Subtask{}) :: :ok | {:error, :already_last}
+  def move_subtask_down(subtask) do
+    max_pos =
+      Subtask
+      |> where([s], s.execution_plan_id == ^subtask.execution_plan_id)
+      |> Repo.aggregate(:max, :position)
+
+    if subtask.position >= max_pos do
+      {:error, :already_last}
+    else
+      swap_subtask_positions(subtask, subtask.position + 1)
+    end
+  end
+
+  defp swap_subtask_positions(subtask, target_position) do
+    other =
+      Subtask
+      |> where(
+        [s],
+        s.execution_plan_id == ^subtask.execution_plan_id and s.position == ^target_position
+      )
+      |> Repo.one()
+
+    case other do
+      nil ->
+        {:error, :no_subtask_at_position}
+
+      other ->
+        # Use a temporary position to avoid unique constraint violation
+        temp_position = -1
+
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:move_to_temp, fn repo, _changes ->
+          {1, _} =
+            from(s in Subtask, where: s.id == ^subtask.id)
+            |> repo.update_all(set: [position: temp_position])
+
+          {:ok, :moved}
+        end)
+        |> Ecto.Multi.run(:move_other, fn repo, _changes ->
+          {1, _} =
+            from(s in Subtask, where: s.id == ^other.id)
+            |> repo.update_all(set: [position: subtask.position])
+
+          {:ok, :moved}
+        end)
+        |> Ecto.Multi.run(:move_to_target, fn repo, _changes ->
+          {1, _} =
+            from(s in Subtask, where: s.id == ^subtask.id)
+            |> repo.update_all(set: [position: target_position])
+
+          {:ok, :moved}
+        end)
+        |> Repo.transaction()
+        |> case do
+          {:ok, _} -> :ok
+          {:error, _step, reason, _} -> {:error, reason}
+        end
+    end
+  end
+
+  @doc "Counts the number of subtasks in a plan."
+  @spec subtask_count(%ExecutionPlan{}) :: non_neg_integer()
+  def subtask_count(plan) do
+    Subtask
+    |> where([s], s.execution_plan_id == ^plan.id)
+    |> Repo.aggregate(:count)
+  end
+
   # --- Agent Runs ---
 
   @doc "Creates a new agent run for a subtask."

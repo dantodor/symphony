@@ -83,6 +83,17 @@ defmodule SymphonyV2.Plans.Subtask do
     |> validate_inclusion(:review_verdict, @review_verdicts)
   end
 
+  @doc "Changeset for editing subtask plan fields during plan review."
+  @spec edit_changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+  def edit_changeset(subtask, attrs) do
+    subtask
+    |> cast(attrs, [:title, :spec, :agent_type])
+    |> validate_required([:title, :spec, :agent_type])
+    |> validate_inclusion(:agent_type, @agent_types)
+    |> validate_length(:title, min: 1)
+    |> validate_length(:spec, min: 1)
+  end
+
   @doc "Changeset for updating subtask status."
   @spec status_changeset(%__MODULE__{}, String.t()) :: Ecto.Changeset.t()
   def status_changeset(subtask, new_status) do

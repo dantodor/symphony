@@ -249,7 +249,16 @@ defmodule SymphonyV2Web.TaskLive.Show do
 
     <%!-- Execution Plan --%>
     <div :if={@plan} class="mt-6">
-      <h2 class="text-lg font-semibold mb-3">Execution Plan</h2>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Execution Plan</h2>
+        <.link
+          :if={@task.status == "plan_review"}
+          navigate={~p"/tasks/#{@task}/plan"}
+          class="btn btn-sm btn-outline btn-primary"
+        >
+          Edit Plan
+        </.link>
+      </div>
       <div class="overflow-x-auto">
         <table class="table table-zebra w-full">
           <thead>

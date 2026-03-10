@@ -5,6 +5,8 @@ defmodule SymphonyV2Web.TaskLiveTest do
 
   alias SymphonyV2.AccountsFixtures
   alias SymphonyV2.Plans
+  alias SymphonyV2.Plans.Subtask
+  alias SymphonyV2.Repo
   alias SymphonyV2.Tasks
   alias SymphonyV2.TasksFixtures
 
@@ -657,9 +659,9 @@ defmodule SymphonyV2Web.TaskLiveTest do
     }
 
     {:ok, subtask} =
-      %SymphonyV2.Plans.Subtask{}
-      |> SymphonyV2.Plans.Subtask.create_changeset(create_attrs)
-      |> SymphonyV2.Repo.insert()
+      %Subtask{}
+      |> Subtask.create_changeset(create_attrs)
+      |> Repo.insert()
 
     # Apply update fields (status, review_verdict, pr_url, etc.) via update_changeset
     update_fields =
@@ -668,8 +670,8 @@ defmodule SymphonyV2Web.TaskLiveTest do
     if map_size(update_fields) > 0 do
       {:ok, subtask} =
         subtask
-        |> SymphonyV2.Plans.Subtask.update_changeset(update_fields)
-        |> SymphonyV2.Repo.update()
+        |> Subtask.update_changeset(update_fields)
+        |> Repo.update()
 
       subtask
     else
