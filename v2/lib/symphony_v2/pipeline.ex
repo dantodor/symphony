@@ -871,6 +871,9 @@ defmodule SymphonyV2.Pipeline do
     broadcast(:task, task.id, {:task_failed, error_message})
     broadcast(:pipeline, {:pipeline_idle, task.id})
 
+    # Cleanup workspace on failure too (not just success)
+    cleanup_workspace(state)
+
     idle_state = return_idle(state)
     send(self(), {:continue, :check_queue})
     idle_state
@@ -1047,11 +1050,24 @@ defmodule SymphonyV2.Pipeline do
   end
 
   defp cleanup_workspace(state) do
-    if state.workspace && state.config.workspace_root do
-      Workspace.cleanup(state.workspace, state.config.workspace_root)
+    if state.workspace && state.config && state.config.workspace_root do
+      case Workspace.cleanup(state.workspace, state.config.workspace_root) do
+        {:ok, _paths} ->
+          Logger.info("Workspace cleaned up", workspace: state.workspace)
+
+        {:error, reason} ->
+          Logger.warning("Workspace cleanup failed",
+            workspace: state.workspace,
+            reason: inspect(reason)
+          )
+      end
     end
   rescue
-    _ -> :ok
+    error ->
+      Logger.warning("Workspace cleanup raised",
+        workspace: state.workspace,
+        error: inspect(error)
+      )
   end
 
   defp return_idle(state) do

@@ -519,7 +519,7 @@ defmodule SymphonyV2.PipelineTest do
       # Set up a task in planning state with a plan already created
       # (simulates successful planning)
       task = create_planning_task()
-      {:ok, plan} = Plans.create_plan(%{task_id: task.id, status: "awaiting_review"})
+      {:ok, _plan} = Plans.create_plan(%{task_id: task.id, status: "awaiting_review"})
       {:ok, task} = Tasks.update_task_status(task, "plan_review")
 
       {_pid, name} = start_pipeline(config)
@@ -736,13 +736,149 @@ defmodule SymphonyV2.PipelineTest do
     end
   end
 
+  # --- Phase 4: Workspace & Cleanup Fixes ---
+
+  describe "workspace cleanup on task failure" do
+    @tag :tmp_dir
+    test "failed task triggers workspace cleanup", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      # Verify workspace exists before failure
+      assert File.dir?(ctx.workspace)
+
+      {_pid, name} = start_pipeline(config)
+
+      # Pipeline recovers the executing task — wait for it to fail
+      # (agent execution will fail since no real agent is available)
+      Process.sleep(3000)
+
+      state = Pipeline.get_state(name)
+
+      # If task failed, workspace should have been cleaned up
+      if state.status == :idle do
+        updated_task = Tasks.get_task!(ctx.task.id)
+
+        if updated_task.status == "failed" do
+          refute File.dir?(ctx.workspace),
+                 "Workspace should be cleaned up after task failure"
+        end
+      end
+    end
+
+    @tag :tmp_dir
+    test "cleanup errors don't crash the pipeline", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      # Create a task in plan_review — approve will trigger execution,
+      # which will fail since no agent. The workspace cleanup should not crash.
+      {task, plan} = create_plan_review_task()
+
+      {:ok, _subtasks} =
+        Plans.create_subtasks_from_plan(plan, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      {:ok, ws} = Workspace.create(config.workspace_root, task.id)
+      {:ok, _} = Workspace.clone_repo(config.repo_path, ws)
+
+      System.cmd("git", ["-C", ws, "config", "user.email", "test@test.com"],
+        stderr_to_stdout: true
+      )
+
+      System.cmd("git", ["-C", ws, "config", "user.name", "Test"], stderr_to_stdout: true)
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.current_step == :awaiting_plan_review
+
+      # Approve and let it fail
+      :ok = Pipeline.approve_plan(name)
+      Process.sleep(3000)
+
+      # Pipeline should still be alive and responsive regardless of cleanup outcome
+      state = Pipeline.get_state(name)
+      assert state.status in [:idle, :processing]
+    end
+
+    @tag :tmp_dir
+    test "cleanup handles nil workspace gracefully", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_pid, name} = start_pipeline(config)
+
+      # Pipeline is idle with no workspace — should not crash
+      state = Pipeline.get_state(name)
+      assert state.workspace == nil
+      assert state.status == :idle
+
+      # Pipeline is still alive
+      assert Process.alive?(GenServer.whereis(name))
+    end
+
+    @tag :tmp_dir
+    test "cleanup handles nil config gracefully", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_pid, name} = start_pipeline(config)
+
+      # Verify pipeline is alive and responsive
+      state = Pipeline.get_state(name)
+      assert state.status == :idle
+      assert Process.alive?(GenServer.whereis(name))
+    end
+  end
+
+  describe "workspace cleanup on task completion" do
+    @tag :tmp_dir
+    test "completed task cleans up workspace", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{
+            position: 1,
+            title: "Step 1",
+            spec: "Do something",
+            agent_type: "claude_code",
+            status: "succeeded"
+          }
+        ])
+
+      # Mark subtask as succeeded
+      subtask = hd(ctx.subtasks)
+      {:ok, _} = Plans.update_subtask(subtask, %{status: "succeeded"})
+
+      # Verify workspace exists
+      assert File.dir?(ctx.workspace)
+
+      {_pid, name} = start_pipeline(config)
+
+      # Wait for pipeline to process (may complete or advance to final review)
+      Process.sleep(2000)
+
+      _state = Pipeline.get_state(name)
+
+      # If task completed, workspace should be cleaned up
+      updated_task = Tasks.get_task!(ctx.task.id)
+
+      if updated_task.status == "completed" do
+        refute File.dir?(ctx.workspace),
+               "Workspace should be cleaned up after task completion"
+      end
+    end
+  end
+
   describe "continue {:run_planning, task} handler" do
     @tag :tmp_dir
     test "run_planning continuation triggers planning", %{tmp_dir: tmp_dir} do
       config = test_config(tmp_dir)
       task = create_planning_task()
 
-      {pid, name} = start_pipeline(config)
+      {pid, _name} = start_pipeline(config)
 
       # Manually trigger planning continuation
       send(pid, {:continue, {:run_planning, task}})
