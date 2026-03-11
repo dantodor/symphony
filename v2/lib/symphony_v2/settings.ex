@@ -81,6 +81,28 @@ defmodule SymphonyV2.Settings do
     CustomAgent.changeset(agent, attrs)
   end
 
+  # --- Pipeline Paused State ---
+
+  @doc "Returns whether the pipeline is currently paused (persisted across restarts)."
+  @spec get_pipeline_paused() :: boolean()
+  def get_pipeline_paused do
+    get_settings().pipeline_paused
+  rescue
+    _ -> false
+  end
+
+  @doc "Persists the pipeline paused state."
+  @spec set_pipeline_paused(boolean()) :: :ok
+  def set_pipeline_paused(paused) when is_boolean(paused) do
+    setting = get_settings()
+
+    setting
+    |> Ecto.Changeset.change(%{pipeline_paused: paused})
+    |> Repo.update()
+
+    :ok
+  end
+
   @doc """
   Checks whether a CLI command is installed on the system.
   Returns true if `System.find_executable/1` finds it.

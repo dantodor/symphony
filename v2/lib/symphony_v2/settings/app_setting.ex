@@ -19,6 +19,7 @@ defmodule SymphonyV2.Settings.AppSetting do
     field :agent_timeout_ms, :integer, default: 600_000
     field :max_retries, :integer, default: 2
     field :review_failure_action, :string, default: "auto_approve"
+    field :pipeline_paused, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end

@@ -19,6 +19,7 @@ defmodule SymphonyV2.Pipeline do
   alias SymphonyV2.GitOps
   alias SymphonyV2.Plans
   alias SymphonyV2.PubSub.Topics
+  alias SymphonyV2.Settings
   alias SymphonyV2.Tasks
   alias SymphonyV2.TestRunner
   alias SymphonyV2.Workspace
@@ -171,6 +172,7 @@ defmodule SymphonyV2.Pipeline do
   def handle_cast(:pause, %{status: :processing} = state) do
     Logger.info("Pipeline paused", task_id: state.current_task_id)
     broadcast(:pipeline, {:pipeline_paused, state.current_task_id})
+    persist_paused(true)
     {:noreply, %{state | paused: true}}
   end
 
@@ -180,10 +182,28 @@ defmodule SymphonyV2.Pipeline do
     Logger.info("Pipeline resumed", task_id: state.current_task_id)
     broadcast(:pipeline, {:pipeline_resumed, state.current_task_id})
     state = %{state | paused: false}
+    persist_paused(false)
 
-    # If we were paused between subtasks, continue execution
-    if state.status == :processing and state.current_step == :executing_subtask do
-      send(self(), {:continue, :execute_next_subtask})
+    if state.status == :processing do
+      case state.current_step do
+        :executing_subtask ->
+          send(self(), {:continue, :execute_next_subtask})
+
+        :planning ->
+          task = Tasks.get_task!(state.current_task_id)
+          send(self(), {:continue, {:run_planning, task}})
+
+        # Steps waiting for human input — no continuation needed
+        :awaiting_plan_review ->
+          :ok
+
+        :awaiting_final_review ->
+          :ok
+
+        # Active steps (testing, reviewing) complete on their own
+        _ ->
+          :ok
+      end
     end
 
     {:noreply, state}
@@ -272,11 +292,8 @@ defmodule SymphonyV2.Pipeline do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
-    # AgentProcess crashed — treat as agent failure
-    Logger.warning("Monitored agent process crashed", reason: inspect(reason))
-    # The receive in run_agent_and_handle_result will timeout and handle this
-    {:noreply, state}
+  def handle_info({:continue, {:run_planning, task}}, state) do
+    {:noreply, run_planning(state, task)}
   end
 
   # --- Task lifecycle ---
@@ -1078,6 +1095,8 @@ defmodule SymphonyV2.Pipeline do
     workspace =
       if File.dir?(workspace_path), do: workspace_path, else: nil
 
+    paused = Settings.get_pipeline_paused()
+
     case task.status do
       "planning" ->
         %{
@@ -1085,7 +1104,8 @@ defmodule SymphonyV2.Pipeline do
           | status: :processing,
             current_task_id: task.id,
             current_step: :planning,
-            workspace: workspace
+            workspace: workspace,
+            paused: paused
         }
 
       "plan_review" ->
@@ -1094,7 +1114,8 @@ defmodule SymphonyV2.Pipeline do
           | status: :processing,
             current_task_id: task.id,
             current_step: :awaiting_plan_review,
-            workspace: workspace
+            workspace: workspace,
+            paused: paused
         }
 
       "executing" ->
@@ -1103,7 +1124,8 @@ defmodule SymphonyV2.Pipeline do
           | status: :processing,
             current_task_id: task.id,
             current_step: :executing_subtask,
-            workspace: workspace
+            workspace: workspace,
+            paused: paused
         }
 
       _ ->
@@ -1121,6 +1143,23 @@ defmodule SymphonyV2.Pipeline do
 
   defp broadcast(:subtask, subtask_id, message) do
     Phoenix.PubSub.broadcast(SymphonyV2.PubSub, Topics.subtask(subtask_id), message)
+  end
+
+  defp persist_paused(value) do
+    Settings.set_pipeline_paused(value)
+  rescue
+    error ->
+      Logger.warning("Failed to persist pipeline paused state",
+        paused: value,
+        error: inspect(error)
+      )
+  end
+
+  defp schedule_recovery_continuation(%{paused: true} = state) do
+    Logger.info("Recovered task but pipeline is paused — waiting for resume",
+      task_id: state.current_task_id,
+      step: state.current_step
+    )
   end
 
   defp schedule_recovery_continuation(state) do

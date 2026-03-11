@@ -217,6 +217,83 @@ defmodule SymphonyV2.PipelineRecoveryTest do
     end
   end
 
+  # --- Phase 3: Recovery preserves paused state ---
+
+  describe "Recovery preserves paused state" do
+    @tag :tmp_dir
+    test "recovery restores paused state from DB", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      # Persist paused state to DB
+      SymphonyV2.Settings.set_pipeline_paused(true)
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.status == :processing
+      assert state.current_task_id == ctx.task.id
+      assert state.paused == true
+
+      # Cleanup
+      SymphonyV2.Settings.set_pipeline_paused(false)
+    end
+
+    @tag :tmp_dir
+    test "recovery with paused=false resumes execution normally", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      # Ensure paused is false in DB
+      SymphonyV2.Settings.set_pipeline_paused(false)
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.status == :processing
+      assert state.current_task_id == ctx.task.id
+      assert state.paused == false
+    end
+
+    @tag :tmp_dir
+    test "crash while paused preserves pause state across restart", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {task, _plan} = create_plan_review_task()
+
+      Process.flag(:trap_exit, true)
+      {pid, _name} = start_pipeline(config)
+
+      # Pause the pipeline
+      Pipeline.pause(pid)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(pid)
+      assert state.paused == true
+
+      # Kill the pipeline
+      Process.exit(pid, :kill)
+      assert_receive {:EXIT, ^pid, :killed}
+
+      # Restart — pause state should be restored from DB
+      {_pid2, name2} = start_pipeline(config)
+      state2 = Pipeline.get_state(name2)
+      assert state2.status == :processing
+      assert state2.current_task_id == task.id
+      assert state2.paused == true
+
+      # Cleanup
+      SymphonyV2.Settings.set_pipeline_paused(false)
+    end
+  end
+
   describe "PubSub Topics integration" do
     @tag :tmp_dir
     test "Pipeline broadcasts use Topics module", %{tmp_dir: tmp_dir} do

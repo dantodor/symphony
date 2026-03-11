@@ -206,6 +206,27 @@ defmodule SymphonyV2.SettingsTest do
     end
   end
 
+  describe "pipeline_paused persistence" do
+    test "get_pipeline_paused/0 defaults to false" do
+      assert Settings.get_pipeline_paused() == false
+    end
+
+    test "set_pipeline_paused/1 persists true" do
+      Settings.set_pipeline_paused(true)
+      assert Settings.get_pipeline_paused() == true
+      # Cleanup
+      Settings.set_pipeline_paused(false)
+    end
+
+    test "set_pipeline_paused/1 persists false after true" do
+      Settings.set_pipeline_paused(true)
+      assert Settings.get_pipeline_paused() == true
+
+      Settings.set_pipeline_paused(false)
+      assert Settings.get_pipeline_paused() == false
+    end
+  end
+
   describe "command_installed?/1" do
     test "returns true for known commands" do
       assert Settings.command_installed?("sh")

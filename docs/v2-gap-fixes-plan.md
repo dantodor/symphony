@@ -204,7 +204,7 @@ Similarly for rebase conflict/failure paths.
 
 ---
 
-## Phase 3: Pause/Resume & Recovery Fixes
+## Phase 3: Pause/Resume & Recovery Fixes ✅ DONE
 
 **Gaps addressed:** #10 (pause only works during subtask execution), #11 (pause state lost on recovery), #13 (dead code handle_info DOWN)
 

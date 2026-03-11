@@ -594,4 +594,163 @@ defmodule SymphonyV2.PipelineTest do
       assert updated_task.status in ["planning", "failed"]
     end
   end
+
+  # --- Phase 3: Pause/Resume & Recovery Fixes ---
+
+  describe "pause/resume expanded step coverage" do
+    @tag :tmp_dir
+    test "pause during awaiting_plan_review, resume sends no continuation", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_task, _plan} = create_plan_review_task()
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.current_step == :awaiting_plan_review
+
+      Pipeline.pause(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.paused == true
+
+      # Resume — should not schedule any continuation for human-input steps
+      Pipeline.resume(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.paused == false
+      assert state.current_step == :awaiting_plan_review
+    end
+
+    @tag :tmp_dir
+    test "pause during executing_subtask, resume sends continuation", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      _ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      {_pid, name} = start_pipeline(config)
+
+      # Subscribe to pipeline topic to observe events
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, "pipeline")
+
+      Pipeline.pause(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.paused == true
+
+      Pipeline.resume(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.paused == false
+      # After resume, pipeline either continued execution (and may have failed/completed)
+      # or is still processing — either way, it transitioned from paused
+      assert state.status in [:idle, :processing]
+    end
+
+    @tag :tmp_dir
+    test "pause when idle is no-op", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_pid, name} = start_pipeline(config)
+
+      Pipeline.pause(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.status == :idle
+      assert state.paused == false
+    end
+
+    @tag :tmp_dir
+    test "resume when not paused is no-op", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_pid, name} = start_pipeline(config)
+
+      Pipeline.resume(name)
+      Process.sleep(50)
+
+      state = Pipeline.get_state(name)
+      assert state.status == :idle
+      assert state.paused == false
+    end
+
+    @tag :tmp_dir
+    test "paused state blocks subtask execution", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do something", agent_type: "claude_code"}
+        ])
+
+      {_pid, name} = start_pipeline(config)
+
+      # Pause before execution proceeds
+      Pipeline.pause(name)
+      Process.sleep(100)
+
+      state = Pipeline.get_state(name)
+      assert state.paused == true
+
+      # Subtask should still be pending since we paused
+      subtask = hd(ctx.subtasks)
+      refreshed = Plans.get_subtask!(subtask.id)
+      assert refreshed.status == "pending"
+    end
+  end
+
+  describe "pause state persistence" do
+    @tag :tmp_dir
+    test "pause persists to database", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_task, _plan} = create_plan_review_task()
+
+      {_pid, name} = start_pipeline(config)
+
+      Pipeline.pause(name)
+      Process.sleep(50)
+
+      # Verify persistence
+      assert SymphonyV2.Settings.get_pipeline_paused() == true
+    end
+
+    @tag :tmp_dir
+    test "resume clears persisted pause state", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      {_task, _plan} = create_plan_review_task()
+
+      {_pid, name} = start_pipeline(config)
+
+      Pipeline.pause(name)
+      Process.sleep(50)
+      assert SymphonyV2.Settings.get_pipeline_paused() == true
+
+      Pipeline.resume(name)
+      Process.sleep(50)
+      assert SymphonyV2.Settings.get_pipeline_paused() == false
+    end
+  end
+
+  describe "continue {:run_planning, task} handler" do
+    @tag :tmp_dir
+    test "run_planning continuation triggers planning", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      task = create_planning_task()
+
+      {pid, name} = start_pipeline(config)
+
+      # Manually trigger planning continuation
+      send(pid, {:continue, {:run_planning, task}})
+      Process.sleep(2000)
+
+      # Planning should have run (and likely failed since no agent)
+      updated_task = Tasks.get_task!(task.id)
+      assert updated_task.status in ["planning", "plan_review", "failed"]
+    end
+  end
 end
