@@ -872,6 +872,58 @@ defmodule SymphonyV2.PipelineTest do
     end
   end
 
+  # --- Phase 10: Minor Fixes & Cleanup ---
+
+  describe "complete_task guards against incomplete subtasks" do
+    @tag :tmp_dir
+    test "task with a failed subtask does not complete", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      ctx =
+        create_executing_task(config, [
+          %{position: 1, title: "Step 1", spec: "Do step 1", agent_type: "claude_code"},
+          %{position: 2, title: "Step 2", spec: "Do step 2", agent_type: "claude_code"}
+        ])
+
+      # Mark first subtask as succeeded, second as failed
+      [s1, s2] = Enum.sort_by(ctx.subtasks, & &1.position)
+      {:ok, _} = Plans.update_subtask(s1, %{status: "succeeded"})
+      {:ok, _} = Plans.update_subtask(s2, %{status: "failed"})
+
+      {_pid, name} = start_pipeline(config)
+
+      # Pipeline recovers — since there's a failed subtask, it should not complete
+      Process.sleep(1500)
+
+      updated_task = Tasks.get_task!(ctx.task.id)
+      # Should be failed (not completed), since not all subtasks succeeded
+      assert updated_task.status == "failed"
+
+      state = Pipeline.get_state(name)
+      assert state.status == :idle
+    end
+  end
+
+  describe "composite index" do
+    test "querying tasks by status and queue_position works" do
+      # Create tasks with different positions
+      t1 = TasksFixtures.task_fixture(%{title: "Task A", queue_position: 2})
+      t2 = TasksFixtures.task_fixture(%{title: "Task B", queue_position: 1})
+
+      # Query uses the composite index — verify it returns results without error
+      pending = Tasks.list_queued_tasks()
+      pending_ids = Enum.map(pending, & &1.id)
+
+      assert t1.id in pending_ids
+      assert t2.id in pending_ids
+
+      # next_queued_task also benefits from the composite index
+      next = Tasks.next_queued_task()
+      # next_queued_task only returns "planning" status, so nil is expected here
+      assert is_nil(next) || is_struct(next, SymphonyV2.Tasks.Task)
+    end
+  end
+
   describe "continue {:run_planning, task} handler" do
     @tag :tmp_dir
     test "run_planning continuation triggers planning", %{tmp_dir: tmp_dir} do

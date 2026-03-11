@@ -65,6 +65,9 @@ defmodule SymphonyV2.Agents.PlanningAgent do
           reason: inspect(reason)
         )
 
+        # Always cleanup temp planning subtasks on error paths
+        cleanup_planning_subtasks_for_task(task)
+
         handle_failure(task, reason)
         error
     end
@@ -259,6 +262,19 @@ defmodule SymphonyV2.Agents.PlanningAgent do
     SymphonyV2.Plans.Subtask
     |> where([s], s.execution_plan_id == ^plan.id and s.title == "Planning")
     |> SymphonyV2.Repo.delete_all()
+  end
+
+  defp cleanup_planning_subtasks_for_task(task) do
+    case Plans.get_plan_by_task_id(task.id) do
+      nil -> :ok
+      plan -> cleanup_planning_subtasks(plan)
+    end
+  rescue
+    error ->
+      Logger.warning("Failed to cleanup planning subtasks",
+        task_id: task.id,
+        error: inspect(error)
+      )
   end
 
   defp transition_task(task, new_status) do

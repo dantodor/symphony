@@ -25,6 +25,10 @@ defmodule SymphonyV2.Pipeline do
   alias SymphonyV2.TestRunner
   alias SymphonyV2.Workspace
 
+  # Safety buffer added to the agent's own timeout. The agent process handles
+  # its internal timeout; this is a pipeline-level safety net to avoid hanging.
+  @pipeline_timeout_buffer_ms 10_000
+
   @type step ::
           :planning
           | :awaiting_plan_review
@@ -509,7 +513,8 @@ defmodule SymphonyV2.Pipeline do
 
             handle_agent_complete(state, subtask, %{status: :failed, exit_code: 1})
         after
-          timeout_ms + 10_000 ->
+          timeout_ms + @pipeline_timeout_buffer_ms ->
+            Logger.warning("Pipeline safety timeout triggered", subtask_id: subtask.id)
             handle_agent_complete(state, subtask, %{status: :timeout})
         end
 
@@ -846,7 +851,18 @@ defmodule SymphonyV2.Pipeline do
 
   defp complete_task(state) do
     task = Tasks.get_task!(state.current_task_id)
+    plan = Plans.get_plan_by_task_id(task.id)
 
+    # Re-verify all subtasks succeeded before marking task complete
+    if plan && !Plans.all_subtasks_succeeded?(plan) do
+      Logger.error("Cannot complete task: not all subtasks succeeded", task_id: task.id)
+      fail_current_task(state, "Not all subtasks succeeded")
+    else
+      complete_task_status(state, task)
+    end
+  end
+
+  defp complete_task_status(state, task) do
     case Tasks.update_task_status(task, "completed") do
       {:ok, task} ->
         Logger.info("Task completed", task_id: task.id)

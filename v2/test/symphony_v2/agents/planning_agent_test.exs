@@ -219,6 +219,70 @@ defmodule SymphonyV2.Agents.PlanningAgentTest do
       assert updated_task.status == "failed"
     end
 
+    test "cleans up planning subtasks on agent failure", %{task: task, workspace: workspace} do
+      script_path = Path.join(workspace, "fail_script.sh")
+      File.write!(script_path, "#!/bin/bash\nexit 1\n")
+      File.chmod!(script_path, 0o755)
+
+      {:ok, supervisor} = start_supervised({DynamicSupervisor, strategy: :one_for_one})
+
+      {:error, {:agent_failed, 1}} =
+        PlanningAgent.run(task, workspace,
+          safehouse_opts: [command_override: {script_path, []}],
+          timeout_ms: 10_000,
+          supervisor: supervisor
+        )
+
+      # Planning subtask should have been cleaned up
+      plan = Plans.get_plan_by_task_id(task.id)
+
+      if plan do
+        planning_subtasks =
+          plan
+          |> SymphonyV2.Repo.preload(:subtasks)
+          |> Map.get(:subtasks, [])
+          |> Enum.filter(&(&1.title == "Planning"))
+
+        assert planning_subtasks == [],
+               "Planning subtasks should be cleaned up on error"
+      end
+    end
+
+    test "cleans up planning subtasks on parse failure", %{task: task, workspace: workspace} do
+      # Agent succeeds but writes empty tasks (parse will reject)
+      script_path = Path.join(workspace, "empty_plan_script.sh")
+
+      File.write!(script_path, """
+      #!/bin/bash
+      echo '{"tasks": []}' > #{Path.join(workspace, "plan.json")}
+      """)
+
+      File.chmod!(script_path, 0o755)
+
+      {:ok, supervisor} = start_supervised({DynamicSupervisor, strategy: :one_for_one})
+
+      {:error, :empty_tasks} =
+        PlanningAgent.run(task, workspace,
+          safehouse_opts: [command_override: {script_path, []}],
+          timeout_ms: 10_000,
+          supervisor: supervisor
+        )
+
+      # Planning subtask should have been cleaned up
+      plan = Plans.get_plan_by_task_id(task.id)
+
+      if plan do
+        planning_subtasks =
+          plan
+          |> SymphonyV2.Repo.preload(:subtasks)
+          |> Map.get(:subtasks, [])
+          |> Enum.filter(&(&1.title == "Planning"))
+
+        assert planning_subtasks == [],
+               "Planning subtasks should be cleaned up on parse failure"
+      end
+    end
+
     test "handles malformed JSON in plan.json", %{task: task, workspace: workspace} do
       script_path = Path.join(workspace, "malformed_script.sh")
 
