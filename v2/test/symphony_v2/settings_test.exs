@@ -227,6 +227,22 @@ defmodule SymphonyV2.SettingsTest do
     end
   end
 
+  describe "singleton constraint" do
+    test "get_settings/0 returns same row on repeated calls" do
+      s1 = Settings.get_settings()
+      s2 = Settings.get_settings()
+      assert s1.id == s2.id
+    end
+
+    test "cannot insert second AppSetting row directly" do
+      _s1 = Settings.get_settings()
+
+      assert_raise Ecto.ConstraintError, fn ->
+        SymphonyV2.Repo.insert!(%AppSetting{singleton: true})
+      end
+    end
+  end
+
   describe "command_installed?/1" do
     test "returns true for known commands" do
       assert Settings.command_installed?("sh")

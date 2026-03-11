@@ -39,7 +39,7 @@ defmodule SymphonyV2.Plans.AgentRun do
   def create_changeset(agent_run, attrs) do
     agent_run
     |> cast(attrs, [:subtask_id, :agent_type, :attempt_number, :started_at])
-    |> validate_required([:subtask_id, :agent_type, :attempt_number, :started_at])
+    |> validate_required([:agent_type, :attempt_number, :started_at])
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:agent_type, Subtask.agent_types())
     |> validate_number(:attempt_number, greater_than: 0)

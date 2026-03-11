@@ -5,6 +5,7 @@ defmodule SymphonyV2.Plans do
   """
 
   import Ecto.Query
+  require Logger
 
   alias SymphonyV2.Plans.AgentRun
   alias SymphonyV2.Plans.ExecutionPlan
@@ -157,13 +158,20 @@ defmodule SymphonyV2.Plans do
 
   # --- Plan Editing ---
 
-  @doc "Updates a subtask's plan fields (title, spec, agent_type) during plan review."
+  @doc """
+  Updates a subtask's plan fields (title, spec, agent_type) during plan review.
+  Only allows editing when the subtask is in "pending" or "failed" status.
+  """
   @spec update_subtask_plan_fields(%Subtask{}, map()) ::
-          {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
+          {:ok, %Subtask{}} | {:error, :subtask_not_editable | Ecto.Changeset.t()}
   def update_subtask_plan_fields(subtask, attrs) do
-    subtask
-    |> Subtask.edit_changeset(attrs)
-    |> Repo.update()
+    if subtask.status in ["pending", "failed"] do
+      subtask
+      |> Subtask.edit_changeset(attrs)
+      |> Repo.update()
+    else
+      {:error, :subtask_not_editable}
+    end
   end
 
   @doc "Gets a subtask by ID."
@@ -210,9 +218,18 @@ defmodule SymphonyV2.Plans do
     end
   end
 
-  @doc "Deletes a subtask and resequences remaining subtasks."
+  @doc "Deletes a subtask and resequences remaining subtasks. Logs a warning if agent runs will be orphaned."
   @spec delete_subtask(%Subtask{}) :: {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
   def delete_subtask(subtask) do
+    run_count = Repo.aggregate(from(r in AgentRun, where: r.subtask_id == ^subtask.id), :count)
+
+    if run_count > 0 do
+      Logger.info("Deleting subtask with #{run_count} agent run(s)",
+        subtask_id: subtask.id,
+        run_count: run_count
+      )
+    end
+
     Ecto.Multi.new()
     |> Ecto.Multi.delete(:delete, subtask)
     |> Ecto.Multi.run(:resequence, fn repo, _changes ->

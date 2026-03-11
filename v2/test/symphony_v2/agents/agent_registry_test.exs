@@ -151,6 +151,24 @@ defmodule SymphonyV2.Agents.AgentRegistryTest do
     end
   end
 
+  describe "normalize_agent_type/1" do
+    test "returns atom for registered agent type" do
+      assert {:ok, :claude_code} = AgentRegistry.normalize_agent_type("claude_code")
+      assert {:ok, :codex} = AgentRegistry.normalize_agent_type("codex")
+      assert {:ok, :gemini_cli} = AgentRegistry.normalize_agent_type("gemini_cli")
+      assert {:ok, :opencode} = AgentRegistry.normalize_agent_type("opencode")
+    end
+
+    test "returns error for unknown agent type" do
+      assert {:error, :unknown_agent} = AgentRegistry.normalize_agent_type("nonexistent")
+    end
+
+    test "returns error for arbitrary string (prevents atom exhaustion)" do
+      assert {:error, :unknown_agent} =
+               AgentRegistry.normalize_agent_type("arbitrary_string_#{System.unique_integer()}")
+    end
+  end
+
   describe "custom agents via config" do
     test "loads custom agents from application config" do
       original = Application.get_env(:symphony_v2, AgentRegistry)

@@ -98,6 +98,19 @@ defmodule SymphonyV2.Agents.AgentRegistry do
   end
 
   @doc """
+  Converts a string agent type to an atom, but only if the agent is registered.
+  Returns `{:error, :unknown_agent}` for unregistered agent types, preventing
+  unbounded atom creation.
+  """
+  @spec normalize_agent_type(String.t()) :: {:ok, atom()} | {:error, :unknown_agent}
+  def normalize_agent_type(agent_type) when is_binary(agent_type) do
+    case get(agent_type) do
+      {:ok, agent} -> {:ok, agent.name}
+      {:error, _} -> {:error, :unknown_agent}
+    end
+  end
+
+  @doc """
   Builds the CLI command list for an agent invocation.
 
   Returns `{command, args}` where `command` is the executable and `args`
@@ -145,8 +158,17 @@ defmodule SymphonyV2.Agents.AgentRegistry do
   defp db_agents do
     SymphonyV2.Settings.list_custom_agents()
     |> Enum.map(fn ca ->
+      # Use to_existing_atom if available, fall back to to_atom only for
+      # validated names (CustomAgent changeset enforces format/length).
+      atom_name =
+        try do
+          String.to_existing_atom(ca.name)
+        rescue
+          ArgumentError -> String.to_atom(ca.name)
+        end
+
       %AgentDef{
-        name: String.to_atom(ca.name),
+        name: atom_name,
         command: ca.command,
         prompt_flag: ca.prompt_flag,
         skip_permissions_flag: ca.skip_permissions_flag,

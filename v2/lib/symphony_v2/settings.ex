@@ -17,8 +17,11 @@ defmodule SymphonyV2.Settings do
   def get_settings do
     case Repo.one(AppSetting) do
       nil ->
-        {:ok, setting} = Repo.insert(%AppSetting{})
-        setting
+        %AppSetting{singleton: true}
+        |> Repo.insert!(on_conflict: :nothing, conflict_target: :singleton)
+
+        # Re-fetch in case another process inserted concurrently
+        Repo.one(AppSetting) || %AppSetting{}
 
       setting ->
         setting

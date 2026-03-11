@@ -345,7 +345,7 @@ defmodule SymphonyV2.PlansTest do
 
     test "fails with invalid attributes" do
       assert {:error, changeset} = Plans.create_agent_run(%{})
-      assert %{subtask_id: ["can't be blank"]} = errors_on(changeset)
+      assert %{agent_type: ["can't be blank"]} = errors_on(changeset)
     end
   end
 
@@ -398,6 +398,79 @@ defmodule SymphonyV2.PlansTest do
 
       assert {:ok, completed} = Plans.complete_agent_run(agent_run, attrs)
       assert completed.status == "timeout"
+    end
+  end
+
+  describe "update_subtask_plan_fields/2 edit guard" do
+    test "allows editing when subtask is pending" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "pending"})
+
+      assert {:ok, updated} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "New title"})
+
+      assert updated.title == "New title"
+    end
+
+    test "allows editing when subtask is failed" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "failed"})
+
+      assert {:ok, updated} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Retry title"})
+
+      assert updated.title == "Retry title"
+    end
+
+    test "rejects editing when subtask is running" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "running"})
+
+      assert {:error, :subtask_not_editable} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Nope"})
+    end
+
+    test "rejects editing when subtask is testing" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "testing"})
+
+      assert {:error, :subtask_not_editable} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Nope"})
+    end
+
+    test "rejects editing when subtask is in_review" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "in_review"})
+
+      assert {:error, :subtask_not_editable} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Nope"})
+    end
+
+    test "rejects editing when subtask is succeeded" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "succeeded"})
+
+      assert {:error, :subtask_not_editable} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Nope"})
+    end
+
+    test "rejects editing when subtask is dispatched" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "dispatched"})
+
+      assert {:error, :subtask_not_editable} =
+               Plans.update_subtask_plan_fields(subtask, %{title: "Nope"})
+    end
+  end
+
+  describe "delete_subtask/1 with agent runs" do
+    test "deleting subtask nilifies agent run subtask_id" do
+      subtask = PlansFixtures.subtask_fixture()
+      agent_run = PlansFixtures.agent_run_fixture(%{subtask: subtask})
+
+      assert {:ok, _deleted} = Plans.delete_subtask(subtask)
+
+      # Agent run should still exist with nil subtask_id
+      reloaded = SymphonyV2.Repo.get!(SymphonyV2.Plans.AgentRun, agent_run.id)
+      assert is_nil(reloaded.subtask_id)
+    end
+
+    test "deleting subtask without agent runs succeeds" do
+      subtask = PlansFixtures.subtask_fixture()
+      assert {:ok, _deleted} = Plans.delete_subtask(subtask)
     end
   end
 end

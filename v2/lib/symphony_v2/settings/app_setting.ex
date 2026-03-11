@@ -20,6 +20,7 @@ defmodule SymphonyV2.Settings.AppSetting do
     field :max_retries, :integer, default: 2
     field :review_failure_action, :string, default: "auto_approve"
     field :pipeline_paused, :boolean, default: false
+    field :singleton, :boolean, default: true
 
     timestamps(type: :utc_datetime)
   end

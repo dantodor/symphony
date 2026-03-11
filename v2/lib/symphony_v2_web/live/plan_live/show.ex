@@ -94,6 +94,12 @@ defmodule SymphonyV2Web.PlanLive.Show do
          |> reload_plan()
          |> put_flash(:info, "Subtask updated.")}
 
+      {:error, :subtask_not_editable} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "This subtask can no longer be edited.")
+         |> reload_plan()}
+
       {:error, changeset} ->
         {:noreply, assign(socket, :edit_form, to_form(changeset))}
     end

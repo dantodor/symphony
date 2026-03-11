@@ -25,10 +25,10 @@ defmodule SymphonyV2.Plans.AgentRunTest do
       assert changeset.valid?
     end
 
-    test "requires subtask_id" do
+    test "allows nil subtask_id (orphaned agent runs survive subtask deletion)" do
       attrs = %{agent_type: "claude_code", attempt_number: 1, started_at: DateTime.utc_now()}
       changeset = AgentRun.create_changeset(%AgentRun{}, attrs)
-      assert %{subtask_id: ["can't be blank"]} = errors_on(changeset)
+      assert changeset.valid?
     end
 
     test "requires agent_type" do

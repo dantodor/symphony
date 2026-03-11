@@ -353,7 +353,7 @@ If `Workspace.cleanup/2` currently raises, change it to return `{:ok, :cleaned}`
 
 ---
 
-## Phase 5: Data Integrity & Safety Fixes
+## Phase 5: Data Integrity & Safety Fixes ✅ DONE
 
 **Gaps addressed:** #8 (AppSetting singleton), #9 (atom exhaustion), #20 (agent run cascade delete), #21 (subtask editable while executing), #22 (String.to_atom in pipeline)
 

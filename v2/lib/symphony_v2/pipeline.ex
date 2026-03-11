@@ -12,6 +12,7 @@ defmodule SymphonyV2.Pipeline do
 
   require Logger
 
+  alias SymphonyV2.Agents.AgentRegistry
   alias SymphonyV2.Agents.AgentSupervisor
   alias SymphonyV2.Agents.PlanningAgent
   alias SymphonyV2.Agents.ReviewAgent
@@ -455,7 +456,7 @@ defmodule SymphonyV2.Pipeline do
   defp launch_and_wait_for_agent(state, subtask) do
     config = state.config
     prompt = build_subtask_prompt(subtask)
-    agent_type = String.to_atom(subtask.agent_type)
+    {:ok, agent_type} = AgentRegistry.normalize_agent_type(subtask.agent_type)
 
     agent_run_attrs = %{
       subtask_id: subtask.id,
