@@ -11,6 +11,7 @@ defmodule SymphonyV2Web.StackReviewLive do
   alias SymphonyV2.Plans
   alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
+  alias SymphonyV2Web.PipelineErrors
 
   @impl true
   def mount(%{"task_id" => task_id}, _session, socket) do
@@ -35,15 +36,27 @@ defmodule SymphonyV2Web.StackReviewLive do
 
   @impl true
   def handle_event("approve_merge", _params, socket) do
-    case SymphonyV2.Pipeline.approve_final() do
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(:merge_status, :merging)
-         |> put_flash(:info, "Merge started...")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not start merge: #{inspect(reason)}")}
+    if task.status == "executing" do
+      case SymphonyV2.Pipeline.approve_final() do
+        :ok ->
+          {:noreply,
+           socket
+           |> assign(:merge_status, :merging)
+           |> put_flash(:info, "Merge started...")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_final_review))}
     end
   end
 
@@ -78,7 +91,10 @@ defmodule SymphonyV2Web.StackReviewLive do
            |> put_flash(:info, "Task rejected with feedback.")}
 
         {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Could not reject: #{inspect(reason)}")}
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
       end
     end
   end
@@ -105,8 +121,8 @@ defmodule SymphonyV2Web.StackReviewLive do
     {:noreply,
      socket
      |> reload_task()
-     |> assign(:merge_status, {:failed, reason})
-     |> put_flash(:error, "Merge failed: #{inspect(reason)}")}
+     |> assign(:merge_status, {:failed, PipelineErrors.format(reason)})
+     |> put_flash(:error, "Task failed: #{PipelineErrors.format(reason)}")}
   end
 
   def handle_info({:task_step, _step}, socket) do

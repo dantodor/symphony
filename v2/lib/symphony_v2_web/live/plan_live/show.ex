@@ -5,6 +5,7 @@ defmodule SymphonyV2Web.PlanLive.Show do
   alias SymphonyV2.Plans
   alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
+  alias SymphonyV2Web.PipelineErrors
 
   @impl true
   def mount(%{"task_id" => task_id}, _session, socket) do
@@ -13,6 +14,7 @@ defmodule SymphonyV2Web.PlanLive.Show do
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
+      subscribe_to_subtasks(plan)
     end
 
     {:ok,
@@ -30,28 +32,52 @@ defmodule SymphonyV2Web.PlanLive.Show do
 
   @impl true
   def handle_event("approve_plan", _params, socket) do
-    case SymphonyV2.Pipeline.approve_plan() do
-      :ok ->
-        {:noreply,
-         socket
-         |> reload_task()
-         |> put_flash(:info, "Plan approved. Execution started.")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not approve plan: #{inspect(reason)}")}
+    if task.status == "plan_review" do
+      case SymphonyV2.Pipeline.approve_plan() do
+        :ok ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:info, "Plan approved. Execution started.")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_plan_review))}
     end
   end
 
   def handle_event("reject_plan", _params, socket) do
-    case SymphonyV2.Pipeline.reject_plan() do
-      :ok ->
-        {:noreply,
-         socket
-         |> reload_task()
-         |> put_flash(:info, "Plan rejected. Re-planning...")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not reject plan: #{inspect(reason)}")}
+    if task.status == "plan_review" do
+      case SymphonyV2.Pipeline.reject_plan() do
+        :ok ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:info, "Plan rejected. Re-planning...")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_plan_review))}
     end
   end
 
@@ -159,7 +185,11 @@ defmodule SymphonyV2Web.PlanLive.Show do
       |> Map.put("position", position)
 
     case Plans.add_subtask_to_plan(plan, attrs) do
-      {:ok, _subtask} ->
+      {:ok, new_subtask} ->
+        if connected?(socket) do
+          Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.subtask(new_subtask.id))
+        end
+
         {:noreply,
          socket
          |> assign(:adding_subtask, false)
@@ -193,7 +223,22 @@ defmodule SymphonyV2Web.PlanLive.Show do
   def handle_info({:task_step, _step}, socket), do: {:noreply, reload_task(socket)}
   def handle_info({:task_completed, _id}, socket), do: {:noreply, reload_task(socket)}
   def handle_info({:task_failed, _reason}, socket), do: {:noreply, reload_task(socket)}
+  def handle_info({:subtask_started, _pos}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_running, _pos}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_testing, _pos}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_reviewing, _pos}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_succeeded, _pos}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_failed, _pos, _err}, socket), do: {:noreply, reload_plan(socket)}
+  def handle_info({:subtask_retrying, _pos, _count}, socket), do: {:noreply, reload_plan(socket)}
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp subscribe_to_subtasks(nil), do: :ok
+
+  defp subscribe_to_subtasks(plan) do
+    Enum.each(plan.subtasks, fn subtask ->
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.subtask(subtask.id))
+    end)
+  end
 
   defp reload_task(socket) do
     task = Tasks.get_task!(socket.assigns.task.id)

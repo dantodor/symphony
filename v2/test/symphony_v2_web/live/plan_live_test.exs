@@ -374,6 +374,37 @@ defmodule SymphonyV2Web.PlanLiveTest do
       assert render(view) =~ "Execution Plan"
     end
 
+    test "handles subtask PubSub events", %{conn: conn, user: user} do
+      {task, _plan} = create_task_with_plan(user)
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}/plan")
+
+      # All subtask events should trigger a plan reload
+      send(view.pid, {:subtask_started, 1})
+      render(view)
+
+      send(view.pid, {:subtask_running, 1})
+      render(view)
+
+      send(view.pid, {:subtask_testing, 1})
+      render(view)
+
+      send(view.pid, {:subtask_reviewing, 1})
+      render(view)
+
+      send(view.pid, {:subtask_succeeded, 1})
+      render(view)
+
+      send(view.pid, {:subtask_failed, 1, "error"})
+      render(view)
+
+      send(view.pid, {:subtask_retrying, 1, 1})
+      html = render(view)
+
+      assert html =~ "Execution Plan"
+      assert html =~ "Step 1"
+    end
+
     test "handles unknown messages gracefully", %{conn: conn, user: user} do
       {task, _plan} = create_task_with_plan(user)
 
@@ -381,6 +412,29 @@ defmodule SymphonyV2Web.PlanLiveTest do
 
       send(view.pid, {:unknown_event, "data"})
       assert render(view) =~ "Execution Plan"
+    end
+  end
+
+  describe "Show — stale data guards" do
+    test "approve_plan guards against task no longer in plan_review", %{conn: conn, user: user} do
+      task = TasksFixtures.task_fixture(%{creator: user})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}/plan")
+
+      # Task is in "draft", not "plan_review"
+      render_click(view, "approve_plan")
+
+      assert Tasks.get_task!(task.id).status == "draft"
+    end
+
+    test "reject_plan guards against task no longer in plan_review", %{conn: conn, user: user} do
+      task = TasksFixtures.task_fixture(%{creator: user})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}/plan")
+
+      render_click(view, "reject_plan")
+
+      assert Tasks.get_task!(task.id).status == "draft"
     end
   end
 

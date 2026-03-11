@@ -10,6 +10,7 @@ defmodule SymphonyV2Web.TaskLive.Index do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.pipeline())
+      Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.tasks())
     end
 
     {:ok,
@@ -39,6 +40,10 @@ defmodule SymphonyV2Web.TaskLive.Index do
   end
 
   def handle_info({:pipeline_idle, _task_id}, socket) do
+    {:noreply, assign_tasks(socket)}
+  end
+
+  def handle_info({:task_status_changed, _task_id, _status}, socket) do
     {:noreply, assign_tasks(socket)}
   end
 

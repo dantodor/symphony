@@ -8,6 +8,7 @@ defmodule SymphonyV2.PubSub.Topics do
   ## Topics
 
   - `"pipeline"` — Pipeline-level events (started, idle, paused, resumed)
+  - `"tasks"` — Global task status change events (for task list updates)
   - `"task:<id>"` — Task-level events (step changes, completion, failure)
   - `"subtask:<id>"` — Subtask-level events (started, running, testing, reviewing, etc.)
   - `"agent_output:<id>"` — Agent output streaming and completion
@@ -16,6 +17,10 @@ defmodule SymphonyV2.PubSub.Topics do
   @doc "Pipeline-level events topic."
   @spec pipeline() :: String.t()
   def pipeline, do: "pipeline"
+
+  @doc "Global task status change events topic."
+  @spec tasks() :: String.t()
+  def tasks, do: "tasks"
 
   @doc "Task-level events topic for a specific task."
   @spec task(Ecto.UUID.t()) :: String.t()

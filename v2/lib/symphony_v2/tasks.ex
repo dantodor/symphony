@@ -58,6 +58,17 @@ defmodule SymphonyV2.Tasks do
     task
     |> Task.status_changeset(new_status)
     |> Repo.update()
+    |> tap(fn
+      {:ok, updated_task} ->
+        Phoenix.PubSub.broadcast(
+          SymphonyV2.PubSub,
+          SymphonyV2.PubSub.Topics.tasks(),
+          {:task_status_changed, updated_task.id, new_status}
+        )
+
+      _ ->
+        :ok
+    end)
   end
 
   @doc """

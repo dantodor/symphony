@@ -616,7 +616,7 @@ Update `run/3` to handle the error tuple from `shell_command/0`.
 
 ---
 
-## Phase 7: LiveView PubSub & Real-Time Fixes
+## Phase 7: LiveView PubSub & Real-Time Fixes ✅ DONE
 
 **Gaps addressed:** #24 (incomplete PubSub subscriptions), #26 (stale data in handlers), #27 (TaskLive.Index missing subscriptions), #29 (external PR merge not detected)
 

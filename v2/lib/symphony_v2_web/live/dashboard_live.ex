@@ -11,6 +11,7 @@ defmodule SymphonyV2Web.DashboardLive do
   alias SymphonyV2.Plans
   alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
+  alias SymphonyV2Web.PipelineErrors
 
   @max_output_lines 500
 
@@ -61,7 +62,7 @@ defmodule SymphonyV2Web.DashboardLive do
         {:noreply, put_flash(socket, :info, "Retrying failed task...")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Cannot retry: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, PipelineErrors.format(reason))}
     end
   end
 
@@ -74,7 +75,10 @@ defmodule SymphonyV2Web.DashboardLive do
          |> put_flash(:info, "Plan approved. Execution started.")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not approve plan: #{inspect(reason)}")}
+        {:noreply,
+         socket
+         |> reload_state()
+         |> put_flash(:error, PipelineErrors.format(reason))}
     end
   end
 
@@ -87,7 +91,10 @@ defmodule SymphonyV2Web.DashboardLive do
          |> put_flash(:info, "Plan rejected. Re-planning...")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not reject plan: #{inspect(reason)}")}
+        {:noreply,
+         socket
+         |> reload_state()
+         |> put_flash(:error, PipelineErrors.format(reason))}
     end
   end
 
@@ -100,7 +107,10 @@ defmodule SymphonyV2Web.DashboardLive do
          |> put_flash(:info, "Final review approved. Merging...")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not approve final: #{inspect(reason)}")}
+        {:noreply,
+         socket
+         |> reload_state()
+         |> put_flash(:error, PipelineErrors.format(reason))}
     end
   end
 
@@ -148,7 +158,7 @@ defmodule SymphonyV2Web.DashboardLive do
     {:noreply,
      socket
      |> reload_state()
-     |> put_flash(:error, "Task failed: #{inspect(reason)}")}
+     |> put_flash(:error, "Task failed: #{PipelineErrors.format(reason)}")}
   end
 
   def handle_info({:subtask_started, _pos}, socket), do: {:noreply, reload_plan(socket)}

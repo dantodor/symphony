@@ -28,6 +28,12 @@ defmodule SymphonyV2.PubSub.TopicsTest do
     end
   end
 
+  describe "tasks/0" do
+    test "returns global tasks topic string" do
+      assert Topics.tasks() == "tasks"
+    end
+  end
+
   describe "agent_output/1" do
     test "returns agent_output topic with id" do
       id = "ghi-789"

@@ -4,6 +4,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
   alias SymphonyV2.Plans
   alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Tasks
+  alias SymphonyV2Web.PipelineErrors
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -46,41 +47,77 @@ defmodule SymphonyV2Web.TaskLive.Show do
   end
 
   def handle_event("approve_plan", _params, socket) do
-    case SymphonyV2.Pipeline.approve_plan() do
-      :ok ->
-        {:noreply,
-         socket
-         |> reload_task()
-         |> put_flash(:info, "Plan approved. Execution started.")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not approve plan: #{inspect(reason)}")}
+    if task.status == "plan_review" do
+      case SymphonyV2.Pipeline.approve_plan() do
+        :ok ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:info, "Plan approved. Execution started.")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_plan_review))}
     end
   end
 
   def handle_event("reject_plan", _params, socket) do
-    case SymphonyV2.Pipeline.reject_plan() do
-      :ok ->
-        {:noreply,
-         socket
-         |> reload_task()
-         |> put_flash(:info, "Plan rejected. Re-planning...")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not reject plan: #{inspect(reason)}")}
+    if task.status == "plan_review" do
+      case SymphonyV2.Pipeline.reject_plan() do
+        :ok ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:info, "Plan rejected. Re-planning...")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_plan_review))}
     end
   end
 
   def handle_event("approve_final", _params, socket) do
-    case SymphonyV2.Pipeline.approve_final() do
-      :ok ->
-        {:noreply,
-         socket
-         |> reload_task()
-         |> put_flash(:info, "Final review approved. Merging...")}
+    task = Tasks.get_task!(socket.assigns.task.id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not approve final: #{inspect(reason)}")}
+    if task.status == "executing" do
+      case SymphonyV2.Pipeline.approve_final() do
+        :ok ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:info, "Final review approved. Merging...")}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> reload_task()
+           |> put_flash(:error, PipelineErrors.format(reason))}
+      end
+    else
+      {:noreply,
+       socket
+       |> reload_task()
+       |> put_flash(:error, PipelineErrors.format(:not_awaiting_final_review))}
     end
   end
 
@@ -101,7 +138,7 @@ defmodule SymphonyV2Web.TaskLive.Show do
     {:noreply,
      socket
      |> reload_task()
-     |> put_flash(:error, "Task failed: #{inspect(reason)}")}
+     |> put_flash(:error, "Task failed: #{PipelineErrors.format(reason)}")}
   end
 
   def handle_info({:subtask_started, _pos}, socket), do: {:noreply, reload_plan(socket)}

@@ -146,6 +146,34 @@ defmodule SymphonyV2Web.TaskLiveTest do
       send(view.pid, {:unknown_event, "data"})
       assert render(view) =~ "Existing Task"
     end
+
+    test "refreshes on task_status_changed PubSub event", %{conn: conn, user: user} do
+      task = TasksFixtures.task_fixture(%{creator: user, title: "Status Change Task"})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks")
+
+      assert has_element?(view, "td", "Status Change Task")
+
+      # Simulate task status change event
+      send(view.pid, {:task_status_changed, task.id, "planning"})
+      assert render(view) =~ "Status Change Task"
+    end
+
+    test "task status change broadcasts update task list", %{conn: conn, user: user} do
+      task = TasksFixtures.task_fixture(%{creator: user, title: "Broadcasting Task"})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks")
+
+      # Change task status — this should broadcast to the "tasks" topic
+      {:ok, _} = Tasks.update_task_status(task, "planning")
+
+      # Give PubSub a moment to deliver
+      Process.sleep(50)
+
+      html = render(view)
+      assert html =~ "Broadcasting Task"
+      assert html =~ "Planning"
+    end
   end
 
   # --- TaskLive.New ---
@@ -580,6 +608,47 @@ defmodule SymphonyV2Web.TaskLiveTest do
 
       # Should not crash
       assert render(view) =~ task.title
+    end
+
+    test "approve_plan guards against stale data — task no longer in plan_review", %{
+      conn: conn,
+      user: user
+    } do
+      # Task is in draft, not plan_review
+      task = TasksFixtures.task_fixture(%{creator: user})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}")
+
+      render_click(view, "approve_plan")
+
+      # Task should remain unchanged — stale data guard kicks in
+      assert Tasks.get_task!(task.id).status == "draft"
+    end
+
+    test "reject_plan guards against stale data — task no longer in plan_review", %{
+      conn: conn,
+      user: user
+    } do
+      task = TasksFixtures.task_fixture(%{creator: user})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}")
+
+      render_click(view, "reject_plan")
+
+      assert Tasks.get_task!(task.id).status == "draft"
+    end
+
+    test "approve_final guards against stale data — task no longer executing", %{
+      conn: conn,
+      user: user
+    } do
+      task = TasksFixtures.task_fixture(%{creator: user})
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}")
+
+      render_click(view, "approve_final")
+
+      assert Tasks.get_task!(task.id).status == "draft"
     end
 
     test "shows all subtask status badge types", %{conn: conn, user: user} do
