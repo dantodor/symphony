@@ -456,6 +456,46 @@ defmodule SymphonyV2.PlansTest do
     end
   end
 
+  describe "add_subtask_to_plan/2 position clamping" do
+    test "clamps position to 1 when given 0 or negative" do
+      plan = PlansFixtures.execution_plan_fixture()
+      _s1 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 1})
+
+      attrs = %{position: 0, title: "New", spec: "Spec", agent_type: "claude_code"}
+      assert {:ok, subtask} = Plans.add_subtask_to_plan(plan, attrs)
+      assert subtask.position == 1
+    end
+
+    test "clamps position to max+1 when given a position beyond the end" do
+      plan = PlansFixtures.execution_plan_fixture()
+      _s1 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 1})
+      _s2 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 2})
+
+      attrs = %{position: 100, title: "New", spec: "Spec", agent_type: "claude_code"}
+      assert {:ok, subtask} = Plans.add_subtask_to_plan(plan, attrs)
+      assert subtask.position == 3
+    end
+
+    test "uses max+1 when no position is given" do
+      plan = PlansFixtures.execution_plan_fixture()
+      _s1 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 1})
+
+      attrs = %{title: "New", spec: "Spec", agent_type: "claude_code"}
+      assert {:ok, subtask} = Plans.add_subtask_to_plan(plan, attrs)
+      assert subtask.position == 2
+    end
+
+    test "inserts at valid middle position" do
+      plan = PlansFixtures.execution_plan_fixture()
+      _s1 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 1})
+      _s2 = PlansFixtures.subtask_fixture(%{execution_plan: plan, position: 2})
+
+      attrs = %{position: 2, title: "Middle", spec: "Spec", agent_type: "claude_code"}
+      assert {:ok, subtask} = Plans.add_subtask_to_plan(plan, attrs)
+      assert subtask.position == 2
+    end
+  end
+
   describe "delete_subtask/1 with agent runs" do
     test "deleting subtask nilifies agent run subtask_id" do
       subtask = PlansFixtures.subtask_fixture()

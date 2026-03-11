@@ -175,5 +175,48 @@ defmodule SymphonyV2.Tasks.TaskTest do
       assert changeset.valid?
       assert get_change(changeset, :queue_position) == 10
     end
+
+    test "rejects negative queue_position" do
+      task = %Task{}
+      changeset = Task.queue_changeset(task, %{queue_position: -1})
+      refute changeset.valid?
+      assert %{queue_position: [_]} = errors_on(changeset)
+    end
+
+    test "accepts zero queue_position" do
+      task = %Task{}
+      changeset = Task.queue_changeset(task, %{queue_position: 0})
+      assert changeset.valid?
+    end
+  end
+
+  describe "create_changeset/2 relevant_files validation" do
+    test "accepts relevant_files within length limit" do
+      changeset =
+        Task.create_changeset(%Task{}, %{
+          title: "Test",
+          description: "Desc",
+          creator_id: 1,
+          relevant_files: "lib/foo.ex\nlib/bar.ex"
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects relevant_files exceeding 10,000 characters" do
+      long_files = String.duplicate("x", 10_001)
+
+      changeset =
+        Task.create_changeset(%Task{}, %{
+          title: "Test",
+          description: "Desc",
+          creator_id: 1,
+          relevant_files: long_files
+        })
+
+      refute changeset.valid?
+      assert %{relevant_files: [msg]} = errors_on(changeset)
+      assert msg =~ "max 10,000"
+    end
   end
 end

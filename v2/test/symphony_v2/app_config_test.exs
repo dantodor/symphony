@@ -238,6 +238,29 @@ defmodule SymphonyV2.AppConfigTest do
     end
   end
 
+  describe "merge_db_settings logging" do
+    import ExUnit.CaptureLog
+
+    test "logs warning when DB settings cannot be loaded" do
+      # In test env without Repo checkout, db_settings() raises and hits rescue
+      original = Application.get_env(:symphony_v2, AppConfig)
+
+      Application.put_env(:symphony_v2, AppConfig,
+        repo_path: "/tmp/test-repo",
+        workspace_root: "/tmp/test-workspaces"
+      )
+
+      log =
+        capture_log([level: :warning], fn ->
+          AppConfig.load()
+        end)
+
+      assert log =~ "Failed to load DB settings"
+
+      if original, do: Application.put_env(:symphony_v2, AppConfig, original)
+    end
+  end
+
   describe "load_and_validate/0" do
     test "loads and validates in one step" do
       original = Application.get_env(:symphony_v2, AppConfig)

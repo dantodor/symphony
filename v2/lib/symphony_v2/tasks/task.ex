@@ -39,6 +39,10 @@ defmodule SymphonyV2.Tasks.Task do
     |> cast(attrs, [:title, :description, :relevant_files, :review_requested, :creator_id])
     |> validate_required([:title, :description, :creator_id])
     |> validate_length(:title, min: 1, max: 255)
+    |> validate_length(:relevant_files,
+      max: 10_000,
+      message: "is too long (max 10,000 characters)"
+    )
     |> validate_inclusion(:status, @statuses)
     |> foreign_key_constraint(:creator_id)
   end
@@ -72,5 +76,6 @@ defmodule SymphonyV2.Tasks.Task do
   def queue_changeset(task, attrs) do
     task
     |> cast(attrs, [:queue_position])
+    |> validate_number(:queue_position, greater_than_or_equal_to: 0)
   end
 end

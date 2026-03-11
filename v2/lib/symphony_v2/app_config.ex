@@ -6,6 +6,8 @@ defmodule SymphonyV2.AppConfig do
   Validated on access to ensure all required paths exist and are valid.
   """
 
+  require Logger
+
   alias SymphonyV2.Agents.AgentRegistry
 
   @type review_failure_action :: :auto_approve | :fail
@@ -67,12 +69,20 @@ defmodule SymphonyV2.AppConfig do
 
   defp merge_db_settings(base) do
     case db_settings() do
-      nil -> base
-      setting -> apply_db_overrides(base, setting)
+      nil ->
+        Logger.debug("No DB settings found, using defaults")
+        base
+
+      setting ->
+        apply_db_overrides(base, setting)
     end
   rescue
-    # DB may not be available during migrations or early startup
-    _error -> base
+    error ->
+      Logger.warning("Failed to load DB settings, using defaults",
+        error: inspect(error)
+      )
+
+      base
   end
 
   @db_override_fields ~w(test_command planning_agent review_agent default_agent

@@ -832,7 +832,7 @@ end
 
 ---
 
-## Phase 9: Config & Validation Hardening
+## Phase 9: Config & Validation Hardening ✅ DONE
 
 **Gaps addressed:** #31 (queue_position not validated), #32 (position gaps when adding subtasks), #34 (relevant_files not validated), #35 (AppConfig silent errors)
 

@@ -5,6 +5,8 @@ defmodule SymphonyV2.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     children = [
@@ -21,7 +23,18 @@ defmodule SymphonyV2.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: SymphonyV2.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # Validate config after repo is started
+    case SymphonyV2.AppConfig.load_and_validate() do
+      {:ok, _config} ->
+        :ok
+
+      {:error, errors} ->
+        Logger.warning("AppConfig validation warnings at startup: #{inspect(errors)}")
+    end
+
+    result
   end
 
   # Tell Phoenix to update the endpoint configuration

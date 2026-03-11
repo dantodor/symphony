@@ -184,7 +184,10 @@ defmodule SymphonyV2.Plans do
   @spec add_subtask_to_plan(%ExecutionPlan{}, map()) ::
           {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
   def add_subtask_to_plan(plan, attrs) do
-    position = Map.get(attrs, :position) || Map.get(attrs, "position")
+    raw_position = Map.get(attrs, :position) || Map.get(attrs, "position")
+    max_position = subtask_count(plan)
+    # Clamp to valid range [1, max_position + 1]
+    position = max(1, min(raw_position || max_position + 1, max_position + 1))
 
     # Normalize all keys to atoms for create_changeset
     normalized_attrs =
