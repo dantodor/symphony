@@ -292,7 +292,8 @@ defmodule SymphonyV2.Agents.AgentProcessTest do
       Process.flag(:trap_exit, true)
 
       # Without command_override, resolve_command calls Safehouse.build_command.
-      # For an unknown agent type, it returns an error which triggers L82.
+      # This will fail either because safehouse binary is not in PATH,
+      # or because the agent type is unknown.
       result =
         AgentProcess.start_link(%{
           agent_type: :unknown_agent_xyz,
@@ -305,7 +306,7 @@ defmodule SymphonyV2.Agents.AgentProcessTest do
         })
 
       assert {:error, {:command_build_error, msg}} = result
-      assert msg =~ "unknown agent type"
+      assert msg =~ "unknown agent type" or msg =~ "safehouse binary not found"
     end
   end
 

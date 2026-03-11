@@ -58,23 +58,26 @@ defmodule SymphonyV2.TestRunner do
   # --- Private ---
 
   defp execute(workspace, test_command, timeout_ms) do
-    {shell, shell_flag} = shell_command()
-    started_at = System.monotonic_time(:millisecond)
+    case shell_command() do
+      {:ok, {shell, shell_flag}} ->
+        started_at = System.monotonic_time(:millisecond)
 
-    port =
-      Port.open({:spawn_executable, shell}, [
-        :binary,
-        :exit_status,
-        :stderr_to_stdout,
-        args: [shell_flag, test_command],
-        cd: workspace,
-        env: []
-      ])
+        port =
+          Port.open({:spawn_executable, shell}, [
+            :binary,
+            :exit_status,
+            :stderr_to_stdout,
+            args: [shell_flag, test_command],
+            cd: workspace,
+            env: []
+          ])
 
-    timer_ref = Process.send_after(self(), {:test_timeout, port}, timeout_ms)
+        timer_ref = Process.send_after(self(), {:test_timeout, port}, timeout_ms)
+        collect_output(port, timer_ref, [], started_at)
 
-    result = collect_output(port, timer_ref, [], started_at)
-    result
+      {:error, _} = error ->
+        error
+    end
   end
 
   defp collect_output(port, timer_ref, output_acc, started_at) do
@@ -156,24 +159,33 @@ defmodule SymphonyV2.TestRunner do
   end
 
   defp shell_command do
-    case :os.type() do
-      {:unix, _} -> {System.find_executable("sh"), "-c"}
-      {:win32, _} -> {System.find_executable("cmd"), "/c"}
+    {exe, flag} =
+      case :os.type() do
+        {:unix, _} -> {"sh", "-c"}
+        {:win32, _} -> {"cmd", "/c"}
+      end
+
+    case System.find_executable(exe) do
+      nil -> {:error, {:shell_not_found, exe}}
+      path -> {:ok, {path, flag}}
     end
   end
 
   defp kill_port(port) do
     case Port.info(port, :os_pid) do
       {:os_pid, os_pid} ->
-        System.cmd("kill", ["-9", "#{os_pid}"])
+        # Kill the entire process group to catch child processes
+        System.cmd("kill", ["-9", "-#{os_pid}"], stderr_to_stdout: true)
 
       nil ->
         :ok
     end
 
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
+    try do
+      Port.close(port)
+    rescue
+      ArgumentError -> :ok
+    end
   end
 
   defp cancel_timer(timer_ref, port) do

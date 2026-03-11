@@ -48,7 +48,8 @@ defmodule SymphonyV2.Agents.Safehouse do
   @spec build_command(atom(), String.t(), keyword()) ::
           {:ok, {String.t(), [String.t()]}} | {:error, String.t()}
   def build_command(agent_type, workspace_path, opts \\ []) do
-    with :ok <- validate_path(workspace_path),
+    with :ok <- maybe_validate_safehouse(opts),
+         :ok <- validate_path(workspace_path),
          {:ok, agent} <- fetch_agent(agent_type) do
       prompt = Keyword.fetch!(opts, :prompt)
       read_only_dirs = Keyword.get(opts, :read_only_dirs, [])
@@ -77,6 +78,28 @@ defmodule SymphonyV2.Agents.Safehouse do
   def build_command_list(agent_type, workspace_path, opts \\ []) do
     with {:ok, {command, args}} <- build_command(agent_type, workspace_path, opts) do
       {:ok, [command | args]}
+    end
+  end
+
+  @doc "Returns whether the safehouse binary is available in PATH."
+  @spec safehouse_available?() :: boolean()
+  def safehouse_available? do
+    System.find_executable(@safehouse_command) != nil
+  end
+
+  defp maybe_validate_safehouse(opts) do
+    if Keyword.get(opts, :skip_safehouse_check, false) do
+      :ok
+    else
+      validate_safehouse_available()
+    end
+  end
+
+  defp validate_safehouse_available do
+    if safehouse_available?() do
+      :ok
+    else
+      {:error, "#{@safehouse_command} binary not found in PATH"}
     end
   end
 

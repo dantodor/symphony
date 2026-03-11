@@ -13,6 +13,9 @@ defmodule SymphonyV2.SecurityTest do
   alias SymphonyV2.Agents.Safehouse
   alias SymphonyV2.Workspace
 
+  # Skip safehouse binary check in tests since it may not be installed
+  @skip_check [skip_safehouse_check: true]
+
   # --- Step 214: Safehouse command construction security ---
 
   describe "Safehouse — shell injection prevention via task titles" do
@@ -20,7 +23,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix bug; rm -rf /; echo pwned"
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       # The prompt should appear as a single argument, not split at semicolons
       assert adversarial_prompt in args
@@ -35,7 +42,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix `whoami` in the code"
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       assert adversarial_prompt in args
     end
@@ -44,7 +55,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix $(cat /etc/passwd) in the code"
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       assert adversarial_prompt in args
     end
@@ -53,7 +68,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix the bug\nrm -rf /"
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       assert adversarial_prompt in args
     end
@@ -62,7 +81,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix bug | cat /etc/shadow > /tmp/stolen"
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       assert adversarial_prompt in args
     end
@@ -71,7 +94,11 @@ defmodule SymphonyV2.SecurityTest do
       adversarial_prompt = "Fix 'the bug' and \"the issue\""
 
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace/task-1", prompt: adversarial_prompt)
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace/task-1",
+          [prompt: adversarial_prompt] ++ @skip_check
+        )
 
       assert adversarial_prompt in args
     end
@@ -80,55 +107,83 @@ defmodule SymphonyV2.SecurityTest do
   describe "Safehouse — path injection prevention" do
     test "workspace path with null bytes is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace\0/evil", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace\0/evil",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "workspace path with semicolons is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace; rm -rf /", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace; rm -rf /",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "workspace path with pipe is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace | evil", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace | evil",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "workspace path with backticks is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace/`whoami`", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace/`whoami`",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "workspace path with $() is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace/$(id)", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace/$(id)",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "workspace path with newlines is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace\n/etc/passwd", prompt: "test")
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace\n/etc/passwd",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "empty workspace path is rejected" do
-      assert {:error, _} = Safehouse.build_command(:claude_code, "", prompt: "test")
+      assert {:error, _} =
+               Safehouse.build_command(:claude_code, "", [prompt: "test"] ++ @skip_check)
     end
 
     test "non-string workspace path is rejected" do
-      assert {:error, _} = Safehouse.build_command(:claude_code, 42, prompt: "test")
+      assert {:error, _} =
+               Safehouse.build_command(:claude_code, 42, [prompt: "test"] ++ @skip_check)
     end
 
     test "read-only path with injection is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace",
-                 prompt: "test",
-                 read_only_dirs: ["/safe", "/evil; rm -rf /"]
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace",
+                 [prompt: "test", read_only_dirs: ["/safe", "/evil; rm -rf /"]] ++ @skip_check
                )
     end
 
     test "read-only path with null bytes is rejected" do
       assert {:error, _} =
-               Safehouse.build_command(:claude_code, "/workspace",
-                 prompt: "test",
-                 read_only_dirs: ["/evil\0path"]
+               Safehouse.build_command(
+                 :claude_code,
+                 "/workspace",
+                 [prompt: "test", read_only_dirs: ["/evil\0path"]] ++ @skip_check
                )
     end
   end
@@ -136,9 +191,10 @@ defmodule SymphonyV2.SecurityTest do
   describe "Safehouse — env var injection prevention" do
     test "env vars are joined with commas, not shell-interpreted" do
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace",
-          prompt: "test",
-          env_vars: ["MY_VAR=evil_value", "ANOTHER"]
+        Safehouse.build_command(
+          :claude_code,
+          "/workspace",
+          [prompt: "test", env_vars: ["MY_VAR=evil_value", "ANOTHER"]] ++ @skip_check
         )
 
       env_flag = Enum.find(args, &String.starts_with?(&1, "--env-pass="))
@@ -150,13 +206,17 @@ defmodule SymphonyV2.SecurityTest do
   describe "Safehouse — agent type safety" do
     test "unknown agent type returns error" do
       assert {:error, _} =
-               Safehouse.build_command(:malicious_agent, "/workspace", prompt: "test")
+               Safehouse.build_command(
+                 :malicious_agent,
+                 "/workspace",
+                 [prompt: "test"] ++ @skip_check
+               )
     end
 
     test "agent type as string is accepted (AgentRegistry supports string keys)" do
       # Safehouse accepts string agent types — this is valid behavior
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command("claude_code", "/workspace", prompt: "test")
+        Safehouse.build_command("claude_code", "/workspace", [prompt: "test"] ++ @skip_check)
 
       assert "--" in args
     end
@@ -166,7 +226,7 @@ defmodule SymphonyV2.SecurityTest do
     test "all agent types produce list-based args (no shell string concatenation)" do
       for agent_type <- [:claude_code, :codex, :gemini_cli, :opencode] do
         {:ok, {"safehouse", args}} =
-          Safehouse.build_command(agent_type, "/workspace", prompt: "test")
+          Safehouse.build_command(agent_type, "/workspace", [prompt: "test"] ++ @skip_check)
 
         assert is_list(args), "#{agent_type} should produce list args"
         assert Enum.all?(args, &is_binary/1), "#{agent_type} args should all be strings"
@@ -176,7 +236,7 @@ defmodule SymphonyV2.SecurityTest do
 
     test "separator appears exactly once" do
       {:ok, {"safehouse", args}} =
-        Safehouse.build_command(:claude_code, "/workspace", prompt: "test")
+        Safehouse.build_command(:claude_code, "/workspace", [prompt: "test"] ++ @skip_check)
 
       separator_count = Enum.count(args, &(&1 == "--"))
       assert separator_count == 1

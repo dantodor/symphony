@@ -473,7 +473,7 @@ For a more robust solution, change the FK to `on_delete: :nilify_all` via migrat
 
 ---
 
-## Phase 6: External Tool Validation & Error Handling
+## Phase 6: External Tool Validation & Error Handling ✅ DONE
 
 **Gaps addressed:** #6 (gh CLI PR URL crash), #15 (zombie subprocess leak), #16 (IO.write not guarded), #17 (safehouse not validated), #18 (rebase abort ignored), #36 (TestRunner shell_command nil)
 

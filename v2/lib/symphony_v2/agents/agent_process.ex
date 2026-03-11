@@ -89,8 +89,15 @@ defmodule SymphonyV2.Agents.AgentProcess do
   def handle_info({port, {:data, data}}, %{port: port} = state) do
     text = IO.iodata_to_binary(data)
 
-    # Write to log file
-    IO.write(state.log_file, text)
+    # Write to log file (non-fatal on failure)
+    try do
+      IO.write(state.log_file, text)
+    rescue
+      _ ->
+        Logger.warning("Failed to write agent output to log file",
+          agent_run_id: state.agent_run_id
+        )
+    end
 
     # Broadcast via PubSub
     Phoenix.PubSub.broadcast(
@@ -263,15 +270,18 @@ defmodule SymphonyV2.Agents.AgentProcess do
   defp kill_port(port) do
     case Port.info(port, :os_pid) do
       {:os_pid, os_pid} ->
-        System.cmd("kill", ["-9", "#{os_pid}"])
+        # Kill the entire process group to catch child processes
+        System.cmd("kill", ["-9", "-#{os_pid}"], stderr_to_stdout: true)
 
       nil ->
         :ok
     end
 
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
+    try do
+      Port.close(port)
+    rescue
+      ArgumentError -> :ok
+    end
   end
 
   defp cancel_timer(nil), do: :ok

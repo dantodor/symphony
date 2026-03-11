@@ -167,7 +167,16 @@ defmodule SymphonyV2.GitOps do
 
       {:error, {:git_failed, _code, _output}} ->
         # Abort the failed rebase to leave workspace clean
-        git(workspace, ["rebase", "--abort"])
+        case git(workspace, ["rebase", "--abort"]) do
+          {:ok, _} ->
+            :ok
+
+          {:error, abort_err} ->
+            Logger.error(
+              "Failed to abort rebase workspace=#{workspace} error=#{inspect(abort_err)}"
+            )
+        end
+
         {:error, :conflict}
     end
   end

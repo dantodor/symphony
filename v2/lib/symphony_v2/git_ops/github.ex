@@ -20,14 +20,15 @@ defmodule SymphonyV2.GitOps.GitHub do
       {output, 0} ->
         url = String.trim(output)
 
-        number =
-          url
-          |> String.split("/")
-          |> List.last()
-          |> String.to_integer()
+        case url |> String.split("/") |> List.last() |> Integer.parse() do
+          {number, _} ->
+            Logger.info("Created PR url=#{url} number=#{number}")
+            {:ok, %{url: url, number: number}}
 
-        Logger.info("Created PR url=#{url} number=#{number}")
-        {:ok, %{url: url, number: number}}
+          :error ->
+            Logger.error("Could not parse PR number from gh output", output: url)
+            {:error, {:pr_parse_failed, url}}
+        end
 
       {output, exit_code} ->
         Logger.error("Failed to create PR exit_code=#{exit_code} output=#{String.trim(output)}")
