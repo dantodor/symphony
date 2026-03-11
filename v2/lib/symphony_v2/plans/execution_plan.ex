@@ -12,7 +12,7 @@ defmodule SymphonyV2.Plans.ExecutionPlan do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses ~w(planning awaiting_review executing completed failed)
+  @statuses ~w(planning awaiting_review plan_review executing completed failed)
 
   schema "execution_plans" do
     field :status, :string, default: "planning"

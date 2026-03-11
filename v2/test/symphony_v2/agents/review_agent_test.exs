@@ -41,7 +41,10 @@ defmodule SymphonyV2.Agents.ReviewAgentTest do
         }
       ])
 
-    # Transition subtask to in_review
+    # Transition subtask through valid state machine to in_review
+    {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+    {:ok, subtask} = Plans.update_subtask_status(subtask, "running")
+    {:ok, subtask} = Plans.update_subtask_status(subtask, "testing")
     {:ok, subtask} = Plans.update_subtask_status(subtask, "in_review")
 
     on_exit(fn -> File.rm_rf!(workspace) end)
@@ -448,6 +451,9 @@ defmodule SymphonyV2.Agents.ReviewAgentTest do
           }
         ])
 
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "running")
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "testing")
       {:ok, subtask} = Plans.update_subtask_status(subtask, "in_review")
 
       {:ok, subtask} =

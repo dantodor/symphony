@@ -140,7 +140,7 @@ defmodule SymphonyV2.Agents.ReviewAgent do
   # --- Private ---
 
   defp validate_different_agent(subtask, review_agent_type) do
-    executor_type = String.to_existing_atom(subtask.agent_type)
+    executor_type = String.to_atom(subtask.agent_type)
 
     if executor_type == review_agent_type do
       {:error, {:same_agent_type, subtask.agent_type}}

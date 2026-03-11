@@ -516,6 +516,9 @@ defmodule SymphonyV2.PipelineE2ETest do
           }
         ])
 
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "running")
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "testing")
       {:ok, subtask} = Plans.update_subtask_status(subtask, "in_review")
 
       {:ok, subtask} =

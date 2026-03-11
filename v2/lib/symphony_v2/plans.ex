@@ -9,6 +9,7 @@ defmodule SymphonyV2.Plans do
   alias SymphonyV2.Plans.AgentRun
   alias SymphonyV2.Plans.ExecutionPlan
   alias SymphonyV2.Plans.Subtask
+  alias SymphonyV2.Plans.SubtaskState
   alias SymphonyV2.Repo
 
   # --- Execution Plans ---
@@ -93,13 +94,39 @@ defmodule SymphonyV2.Plans do
     |> Repo.update()
   end
 
-  @doc "Updates a subtask's status."
+  @doc "Updates a subtask's status, validating the transition against the state machine."
   @spec update_subtask_status(%Subtask{}, String.t()) ::
-          {:ok, %Subtask{}} | {:error, Ecto.Changeset.t()}
+          {:ok, %Subtask{}}
+          | {:error, Ecto.Changeset.t() | {:invalid_transition, String.t(), String.t()}}
   def update_subtask_status(subtask, new_status) do
-    subtask
-    |> Subtask.status_changeset(new_status)
-    |> Repo.update()
+    if SubtaskState.valid_transition?(subtask.status, new_status) do
+      subtask
+      |> Subtask.status_changeset(new_status)
+      |> Repo.update()
+    else
+      {:error, {:invalid_transition, subtask.status, new_status}}
+    end
+  end
+
+  @doc "Resets a subtask for retry, clearing execution artifacts and setting status to pending."
+  @spec reset_subtask_for_retry(%Subtask{}, String.t() | nil) ::
+          {:ok, %Subtask{}} | {:error, {:invalid_transition, String.t(), String.t()}}
+  def reset_subtask_for_retry(subtask, error_message \\ nil) do
+    if SubtaskState.valid_transition?(subtask.status, "pending") do
+      subtask
+      |> Subtask.update_changeset(%{
+        status: "pending",
+        retry_count: (subtask.retry_count || 0) + 1,
+        last_error: error_message,
+        review_verdict: nil,
+        review_reasoning: nil,
+        test_passed: nil,
+        test_output: nil
+      })
+      |> Repo.update()
+    else
+      {:error, {:invalid_transition, subtask.status, "pending"}}
+    end
   end
 
   @doc "Returns the next pending subtask for a given plan, ordered by position."
@@ -155,7 +182,7 @@ defmodule SymphonyV2.Plans do
     normalized_attrs =
       attrs
       |> Enum.into(%{}, fn
-        {k, v} when is_binary(k) -> {String.to_existing_atom(k), v}
+        {k, v} when is_binary(k) -> {String.to_atom(k), v}
         {k, v} -> {k, v}
       end)
       |> Map.put(:execution_plan_id, plan.id)

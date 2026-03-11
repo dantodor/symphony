@@ -320,7 +320,7 @@ defmodule SymphonyV2.Pipeline do
       {:error, reason} ->
         Logger.error("Planning failed", task_id: task.id, reason: inspect(reason))
         broadcast(:task, task.id, {:task_failed, reason})
-        finish_failed(state)
+        fail_current_task(state, "Planning failed: #{inspect(reason)}")
     end
   end
 
@@ -330,8 +330,23 @@ defmodule SymphonyV2.Pipeline do
       task = Tasks.get_task!(task.id)
       do_approve_plan_for_task(task, state)
     else
-      broadcast(:task, task.id, {:task_step, :awaiting_plan_review})
-      %{state | current_step: :awaiting_plan_review}
+      # Transition task and plan to plan_review
+      task = Tasks.get_task!(task.id)
+      plan = Plans.get_plan_by_task_id(task.id)
+
+      with {:ok, _task} <- Tasks.update_task_status(task, "plan_review"),
+           {:ok, _plan} <- Plans.update_plan_status(plan, "plan_review") do
+        broadcast(:task, task.id, {:task_step, :awaiting_plan_review})
+        %{state | current_step: :awaiting_plan_review}
+      else
+        {:error, reason} ->
+          Logger.error("Failed to transition to plan_review",
+            task_id: task.id,
+            reason: inspect(reason)
+          )
+
+          fail_current_task(state, "Failed to enter plan review: #{inspect(reason)}")
+      end
     end
   end
 
@@ -353,7 +368,7 @@ defmodule SymphonyV2.Pipeline do
     else
       {:error, reason} ->
         Logger.error("Failed to approve plan", task_id: task.id, reason: inspect(reason))
-        finish_failed(state)
+        fail_current_task(state, "Failed to approve plan: #{inspect(reason)}")
     end
   end
 
@@ -367,7 +382,7 @@ defmodule SymphonyV2.Pipeline do
 
       {:error, reason} ->
         Logger.error("Failed to reject plan", task_id: task.id, reason: inspect(reason))
-        finish_failed(state)
+        fail_current_task(state, "Failed to reject plan: #{inspect(reason)}")
     end
   end
 
@@ -630,21 +645,26 @@ defmodule SymphonyV2.Pipeline do
         advance_to_next_subtask(state)
 
       {:error, reason} ->
-        Logger.warning("Review failed, auto-approving subtask",
-          subtask_id: subtask.id,
-          reason: inspect(reason)
-        )
+        case state.config.review_failure_action do
+          :fail ->
+            handle_subtask_failure(state, subtask, "Review failed: #{inspect(reason)}")
 
-        # Review failure is non-fatal — auto-approve and continue
-        {:ok, _subtask} =
-          Plans.update_subtask(subtask, %{
-            status: "succeeded",
-            review_verdict: "skipped",
-            review_reasoning: "Review failed: #{inspect(reason)}"
-          })
+          _auto_approve ->
+            Logger.warning("Review failed, auto-approving subtask",
+              subtask_id: subtask.id,
+              reason: inspect(reason)
+            )
 
-        broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
-        advance_to_next_subtask(state)
+            {:ok, _subtask} =
+              Plans.update_subtask(subtask, %{
+                status: "succeeded",
+                review_verdict: "skipped",
+                review_reasoning: "Review failed: #{inspect(reason)}"
+              })
+
+            broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
+            advance_to_next_subtask(state)
+        end
     end
   end
 
@@ -693,17 +713,35 @@ defmodule SymphonyV2.Pipeline do
     GitOps.reset_hard(workspace)
     GitOps.clean(workspace)
 
-    # Update subtask for retry
-    {:ok, subtask} =
-      Plans.update_subtask(subtask, %{
-        status: "pending",
-        retry_count: (subtask.retry_count || 0) + 1,
-        last_error: error_message,
-        review_verdict: nil,
-        review_reasoning: nil,
-        test_passed: nil,
-        test_output: nil
-      })
+    # Transition to failed first (if not already failed/pending), then reset for retry.
+    # If still pending (failed before dispatch), use update_subtask to record the error.
+    subtask =
+      case subtask.status do
+        "failed" ->
+          subtask
+
+        "pending" ->
+          # Failed before even dispatching — just record the error/retry count
+          {:ok, updated} =
+            Plans.update_subtask(subtask, %{
+              retry_count: (subtask.retry_count || 0) + 1,
+              last_error: error_message
+            })
+
+          updated
+
+        _ ->
+          {:ok, failed_subtask} = Plans.update_subtask_status(subtask, "failed")
+          failed_subtask
+      end
+
+    subtask =
+      if subtask.status != "pending" do
+        {:ok, reset} = Plans.reset_subtask_for_retry(subtask, error_message)
+        reset
+      else
+        subtask
+      end
 
     broadcast(:subtask, subtask.id, {:subtask_retrying, subtask.position, subtask.retry_count})
 
@@ -771,11 +809,13 @@ defmodule SymphonyV2.Pipeline do
 
           {:error, {:merge_failed_at, number, reason}} ->
             Logger.error("Merge failed", pr_number: number, reason: inspect(reason))
+            mark_subtask_failed(subtasks, :pr_number, number, "Merge failed: #{inspect(reason)}")
             fail_current_task(state, "Merge failed at PR ##{number}: #{inspect(reason)}")
         end
 
       {:error, {:conflict, branch}} ->
         Logger.error("Rebase conflict", branch: branch, task_id: task.id)
+        mark_subtask_failed(subtasks, :branch_name, branch, "Rebase conflict on branch #{branch}")
         fail_current_task(state, "Rebase conflict on branch #{branch}")
 
       {:error, reason} ->
@@ -819,11 +859,11 @@ defmodule SymphonyV2.Pipeline do
     idle_state
   end
 
-  defp finish_failed(state) do
-    broadcast(:pipeline, {:pipeline_idle, state.current_task_id})
-    idle_state = return_idle(state)
-    send(self(), {:continue, :check_queue})
-    idle_state
+  defp mark_subtask_failed(subtasks, field, value, error_message) do
+    case Enum.find(subtasks, &(Map.get(&1, field) == value)) do
+      nil -> :ok
+      subtask -> Plans.update_subtask(subtask, %{status: "failed", last_error: error_message})
+    end
   end
 
   # --- Retry failed task ---
@@ -865,15 +905,7 @@ defmodule SymphonyV2.Pipeline do
       plan.subtasks
       |> Enum.filter(&(&1.status == "failed"))
       |> Enum.each(fn subtask ->
-        Plans.update_subtask(subtask, %{
-          status: "pending",
-          last_error: nil,
-          retry_count: 0,
-          review_verdict: nil,
-          review_reasoning: nil,
-          test_passed: nil,
-          test_output: nil
-        })
+        Plans.reset_subtask_for_retry(subtask, nil)
       end)
 
       Plans.update_plan_status(plan, "executing")

@@ -52,6 +52,8 @@ defmodule SymphonyV2.PlansFixtures do
       |> Repo.insert()
 
     if status && status != "pending" do
+      # Use status_changeset directly (bypassing state machine validation)
+      # to allow setting arbitrary statuses in test fixtures
       {:ok, subtask} =
         subtask
         |> Subtask.status_changeset(status)

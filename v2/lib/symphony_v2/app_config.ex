@@ -8,6 +8,8 @@ defmodule SymphonyV2.AppConfig do
 
   alias SymphonyV2.Agents.AgentRegistry
 
+  @type review_failure_action :: :auto_approve | :fail
+
   @type t :: %__MODULE__{
           repo_path: String.t() | nil,
           workspace_root: String.t() | nil,
@@ -17,7 +19,8 @@ defmodule SymphonyV2.AppConfig do
           default_agent: String.t(),
           dangerously_skip_permissions: boolean(),
           agent_timeout_ms: pos_integer(),
-          max_retries: non_neg_integer()
+          max_retries: non_neg_integer(),
+          review_failure_action: review_failure_action()
         }
 
   @enforce_keys []
@@ -29,7 +32,8 @@ defmodule SymphonyV2.AppConfig do
             default_agent: "claude_code",
             dangerously_skip_permissions: false,
             agent_timeout_ms: 600_000,
-            max_retries: 2
+            max_retries: 2,
+            review_failure_action: :auto_approve
 
   @doc """
   Loads the application configuration.
@@ -54,7 +58,8 @@ defmodule SymphonyV2.AppConfig do
       default_agent: Keyword.get(config, :default_agent, "claude_code"),
       dangerously_skip_permissions: Keyword.get(config, :dangerously_skip_permissions, false),
       agent_timeout_ms: Keyword.get(config, :agent_timeout_ms, 600_000),
-      max_retries: Keyword.get(config, :max_retries, 2)
+      max_retries: Keyword.get(config, :max_retries, 2),
+      review_failure_action: Keyword.get(config, :review_failure_action, :auto_approve)
     }
 
     merge_db_settings(base)
@@ -71,16 +76,26 @@ defmodule SymphonyV2.AppConfig do
   end
 
   @db_override_fields ~w(test_command planning_agent review_agent default_agent
-                          dangerously_skip_permissions agent_timeout_ms max_retries)a
+                          dangerously_skip_permissions agent_timeout_ms max_retries
+                          review_failure_action)a
 
   defp apply_db_overrides(base, setting) do
     Enum.reduce(@db_override_fields, base, fn field, acc ->
       case Map.get(setting, field) do
         nil -> acc
-        value -> Map.put(acc, field, value)
+        value -> Map.put(acc, field, coerce_field(field, value))
       end
     end)
   end
+
+  defp coerce_field(:review_failure_action, value) when is_binary(value) do
+    case value do
+      "fail" -> :fail
+      _ -> :auto_approve
+    end
+  end
+
+  defp coerce_field(_field, value), do: value
 
   defp db_settings do
     SymphonyV2.Repo.one(SymphonyV2.Settings.AppSetting)

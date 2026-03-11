@@ -41,7 +41,7 @@ defmodule SymphonyV2.Agents.PlanningAgent do
   @spec run(%Task{}, String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(%Task{} = task, workspace, opts \\ []) do
     config = SymphonyV2.AppConfig.load()
-    agent_type = Keyword.get(opts, :agent_type, String.to_existing_atom(config.planning_agent))
+    agent_type = Keyword.get(opts, :agent_type, String.to_atom(config.planning_agent))
     timeout_ms = Keyword.get(opts, :timeout_ms, config.agent_timeout_ms)
     safehouse_opts = Keyword.get(opts, :safehouse_opts, [])
     supervisor = Keyword.get(opts, :supervisor, AgentSupervisor)

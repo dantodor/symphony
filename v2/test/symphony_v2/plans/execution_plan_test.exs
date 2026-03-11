@@ -84,7 +84,8 @@ defmodule SymphonyV2.Plans.ExecutionPlanTest do
       assert "executing" in statuses
       assert "completed" in statuses
       assert "failed" in statuses
-      assert length(statuses) == 5
+      assert "plan_review" in statuses
+      assert length(statuses) == 6
     end
   end
 end

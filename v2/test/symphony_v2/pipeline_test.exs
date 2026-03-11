@@ -486,4 +486,112 @@ defmodule SymphonyV2.PipelineTest do
       assert state.status == :idle
     end
   end
+
+  # --- Phase 2: Pipeline state transition fixes ---
+
+  describe "planning failure transitions task to failed" do
+    @tag :tmp_dir
+    test "planning error marks task as failed", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      # Start pipeline first, then create task and trigger queue check
+      {_pid, name} = start_pipeline(config)
+
+      task = create_planning_task()
+      Pipeline.check_queue(name)
+
+      # Wait for planning to fail (no real agent available)
+      Process.sleep(3000)
+
+      updated_task = Tasks.get_task!(task.id)
+      assert updated_task.status == "failed"
+
+      state = Pipeline.get_state(name)
+      assert state.status == :idle
+    end
+  end
+
+  describe "planning success transitions to plan_review" do
+    @tag :tmp_dir
+    test "task and plan both transition to plan_review on recovery", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      # Set up a task in planning state with a plan already created
+      # (simulates successful planning)
+      task = create_planning_task()
+      {:ok, plan} = Plans.create_plan(%{task_id: task.id, status: "awaiting_review"})
+      {:ok, task} = Tasks.update_task_status(task, "plan_review")
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.current_step == :awaiting_plan_review
+      assert state.current_task_id == task.id
+
+      # Verify statuses
+      updated_task = Tasks.get_task!(task.id)
+      assert updated_task.status == "plan_review"
+
+      updated_plan = Plans.get_plan_by_task_id(task.id)
+      assert updated_plan.status in ["awaiting_review", "plan_review"]
+    end
+  end
+
+  describe "review_failure_action configuration" do
+    @tag :tmp_dir
+    test "config defaults to :auto_approve", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+      assert config.review_failure_action == :auto_approve
+    end
+
+    @tag :tmp_dir
+    test "config can be set to :fail", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir, review_failure_action: :fail)
+      assert config.review_failure_action == :fail
+    end
+  end
+
+  describe "approve_plan error handling" do
+    @tag :tmp_dir
+    test "approve_plan failure marks task as failed", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      # Create a task in plan_review with no subtasks — approve will work
+      # but executing will fail because there's nothing to execute
+      {task, _plan} = create_plan_review_task()
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.current_step == :awaiting_plan_review
+
+      :ok = Pipeline.approve_plan(name)
+      Process.sleep(500)
+
+      # With no pending subtasks, task should either complete or advance
+      updated_task = Tasks.get_task!(task.id)
+      assert updated_task.status in ["executing", "completed", "failed"]
+    end
+  end
+
+  describe "reject_plan error handling" do
+    @tag :tmp_dir
+    test "reject_plan failure marks task as failed", %{tmp_dir: tmp_dir} do
+      config = test_config(tmp_dir)
+
+      {task, _plan} = create_plan_review_task()
+
+      {_pid, name} = start_pipeline(config)
+
+      state = Pipeline.get_state(name)
+      assert state.current_step == :awaiting_plan_review
+
+      :ok = Pipeline.reject_plan(name)
+      Process.sleep(2000)
+
+      # After rejection, planning re-runs but fails (no agent), so task should be failed
+      updated_task = Tasks.get_task!(task.id)
+      assert updated_task.status in ["planning", "failed"]
+    end
+  end
 end

@@ -15,6 +15,7 @@ defmodule SymphonyV2.AppConfigTest do
       assert config.dangerously_skip_permissions == false
       assert config.agent_timeout_ms == 600_000
       assert config.max_retries == 2
+      assert config.review_failure_action == :auto_approve
     end
   end
 
@@ -210,6 +211,30 @@ defmodule SymphonyV2.AppConfigTest do
       # Cleanup
       File.chmod!(ro_dir, 0o755)
       File.rm_rf!(ro_dir)
+    end
+  end
+
+  describe "review_failure_action" do
+    test "defaults to :auto_approve" do
+      config = %AppConfig{}
+      assert config.review_failure_action == :auto_approve
+    end
+
+    test "can be set via application config" do
+      original = Application.get_env(:symphony_v2, AppConfig)
+
+      Application.put_env(:symphony_v2, AppConfig,
+        repo_path: "/tmp/test-repo",
+        workspace_root: "/tmp/test-workspaces",
+        review_failure_action: :fail
+      )
+
+      config = AppConfig.load()
+      assert config.review_failure_action == :fail
+
+      if original,
+        do: Application.put_env(:symphony_v2, AppConfig, original),
+        else: Application.delete_env(:symphony_v2, AppConfig)
     end
   end
 

@@ -61,6 +61,21 @@ defmodule SymphonyV2.SettingsTest do
       {:error, changeset} = Settings.update_settings(%{"planning_agent" => "nonexistent"})
       assert errors_on(changeset).planning_agent
     end
+
+    test "updates review_failure_action" do
+      {:ok, setting} = Settings.update_settings(%{"review_failure_action" => "fail"})
+      assert setting.review_failure_action == "fail"
+    end
+
+    test "rejects invalid review_failure_action" do
+      {:error, changeset} = Settings.update_settings(%{"review_failure_action" => "invalid"})
+      assert errors_on(changeset).review_failure_action
+    end
+
+    test "review_failure_action defaults to auto_approve" do
+      setting = Settings.get_settings()
+      assert setting.review_failure_action == "auto_approve"
+    end
   end
 
   describe "change_settings/2" do

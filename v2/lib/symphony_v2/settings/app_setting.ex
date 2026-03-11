@@ -18,12 +18,16 @@ defmodule SymphonyV2.Settings.AppSetting do
     field :dangerously_skip_permissions, :boolean, default: false
     field :agent_timeout_ms, :integer, default: 600_000
     field :max_retries, :integer, default: 2
+    field :review_failure_action, :string, default: "auto_approve"
 
     timestamps(type: :utc_datetime)
   end
 
   @fields ~w(test_command planning_agent review_agent default_agent
-             dangerously_skip_permissions agent_timeout_ms max_retries)a
+             dangerously_skip_permissions agent_timeout_ms max_retries
+             review_failure_action)a
+
+  @review_failure_actions ~w(auto_approve fail)
 
   @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
   def changeset(%__MODULE__{} = setting, attrs) do
@@ -36,6 +40,7 @@ defmodule SymphonyV2.Settings.AppSetting do
     |> validate_agent_type(:planning_agent)
     |> validate_agent_type(:review_agent)
     |> validate_agent_type(:default_agent)
+    |> validate_inclusion(:review_failure_action, @review_failure_actions)
   end
 
   defp validate_agent_type(changeset, field) do

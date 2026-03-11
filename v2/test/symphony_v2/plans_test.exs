@@ -69,6 +69,12 @@ defmodule SymphonyV2.PlansTest do
       assert updated.status == "awaiting_review"
     end
 
+    test "accepts plan_review status" do
+      plan = PlansFixtures.execution_plan_fixture()
+      assert {:ok, updated} = Plans.update_plan_status(plan, "plan_review")
+      assert updated.status == "plan_review"
+    end
+
     test "rejects invalid status" do
       plan = PlansFixtures.execution_plan_fixture()
       assert {:error, changeset} = Plans.update_plan_status(plan, "nonexistent")
@@ -153,16 +159,109 @@ defmodule SymphonyV2.PlansTest do
   end
 
   describe "update_subtask_status/2" do
-    test "updates the subtask status" do
+    test "updates the subtask status for valid transition" do
       subtask = PlansFixtures.subtask_fixture()
       assert {:ok, updated} = Plans.update_subtask_status(subtask, "dispatched")
       assert updated.status == "dispatched"
     end
 
-    test "rejects invalid status" do
+    test "allows full valid transition chain" do
       subtask = PlansFixtures.subtask_fixture()
-      assert {:error, changeset} = Plans.update_subtask_status(subtask, "nonexistent")
-      assert %{status: ["is invalid"]} = errors_on(changeset)
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "running")
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "testing")
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "in_review")
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "succeeded")
+      assert subtask.status == "succeeded"
+    end
+
+    test "rejects invalid status value" do
+      subtask = PlansFixtures.subtask_fixture()
+
+      assert {:error, {:invalid_transition, "pending", "nonexistent"}} =
+               Plans.update_subtask_status(subtask, "nonexistent")
+    end
+
+    test "rejects invalid transition from pending to running" do
+      subtask = PlansFixtures.subtask_fixture()
+
+      assert {:error, {:invalid_transition, "pending", "running"}} =
+               Plans.update_subtask_status(subtask, "running")
+    end
+
+    test "rejects invalid transition from pending to succeeded" do
+      subtask = PlansFixtures.subtask_fixture()
+
+      assert {:error, {:invalid_transition, "pending", "succeeded"}} =
+               Plans.update_subtask_status(subtask, "succeeded")
+    end
+
+    test "rejects skipping states" do
+      subtask = PlansFixtures.subtask_fixture()
+      assert {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+
+      assert {:error, {:invalid_transition, "dispatched", "testing"}} =
+               Plans.update_subtask_status(subtask, "testing")
+    end
+  end
+
+  describe "reset_subtask_for_retry/2" do
+    test "resets a failed subtask to pending" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "failed"})
+      assert {:ok, reset} = Plans.reset_subtask_for_retry(subtask, "test error")
+      assert reset.status == "pending"
+      assert reset.retry_count == 1
+      assert reset.last_error == "test error"
+      assert is_nil(reset.review_verdict)
+      assert is_nil(reset.review_reasoning)
+      assert is_nil(reset.test_passed)
+      assert is_nil(reset.test_output)
+    end
+
+    test "resets a succeeded subtask to pending (task-level retry)" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "succeeded"})
+      assert {:ok, reset} = Plans.reset_subtask_for_retry(subtask)
+      assert reset.status == "pending"
+      assert reset.retry_count == 1
+    end
+
+    test "resets an in_review subtask to pending" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "in_review"})
+      assert {:ok, reset} = Plans.reset_subtask_for_retry(subtask)
+      assert reset.status == "pending"
+    end
+
+    test "increments retry_count on each retry" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "failed"})
+      assert {:ok, subtask} = Plans.reset_subtask_for_retry(subtask, "error 1")
+      assert subtask.retry_count == 1
+
+      # Transition back to failed to retry again
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "dispatched")
+      {:ok, subtask} = Plans.update_subtask_status(subtask, "failed")
+      assert {:ok, subtask} = Plans.reset_subtask_for_retry(subtask, "error 2")
+      assert subtask.retry_count == 2
+      assert subtask.last_error == "error 2"
+    end
+
+    test "rejects reset from pending (cannot go pending→pending)" do
+      subtask = PlansFixtures.subtask_fixture()
+
+      assert {:error, {:invalid_transition, "pending", "pending"}} =
+               Plans.reset_subtask_for_retry(subtask)
+    end
+
+    test "rejects reset from running" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "running"})
+
+      assert {:error, {:invalid_transition, "running", "pending"}} =
+               Plans.reset_subtask_for_retry(subtask)
+    end
+
+    test "accepts nil error_message" do
+      subtask = PlansFixtures.subtask_fixture(%{status: "failed"})
+      assert {:ok, reset} = Plans.reset_subtask_for_retry(subtask)
+      assert is_nil(reset.last_error)
     end
   end
 

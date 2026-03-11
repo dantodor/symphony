@@ -206,6 +206,16 @@ defmodule SymphonyV2Web.SettingsLive do
               />
 
               <.input
+                field={@settings_form[:review_failure_action]}
+                type="select"
+                label="Review Failure Action"
+                options={[
+                  {"Auto-approve (skip failed review)", "auto_approve"},
+                  {"Fail subtask", "fail"}
+                ]}
+              />
+
+              <.input
                 field={@settings_form[:dangerously_skip_permissions]}
                 type="checkbox"
                 label="Dangerously Skip Permissions (auto-approve all gates)"
@@ -267,6 +277,10 @@ defmodule SymphonyV2Web.SettingsLive do
                   <tr>
                     <td class="font-medium">Max Retries</td>
                     <td>{@config.max_retries}</td>
+                  </tr>
+                  <tr>
+                    <td class="font-medium">Review Failure Action</td>
+                    <td>{format_review_failure_action(@config.review_failure_action)}</td>
                   </tr>
                   <tr>
                     <td class="font-medium">Skip Permissions</td>
@@ -434,6 +448,10 @@ defmodule SymphonyV2Web.SettingsLive do
   end
 
   defp format_timeout(_), do: "unknown"
+
+  defp format_review_failure_action(:auto_approve), do: "Auto-approve"
+  defp format_review_failure_action(:fail), do: "Fail subtask"
+  defp format_review_failure_action(_), do: "Auto-approve"
 
   defp builtin?(agent, custom_agents) do
     not Enum.any?(custom_agents, fn ca -> String.to_atom(ca.name) == agent.name end)
