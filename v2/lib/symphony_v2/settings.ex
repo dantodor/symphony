@@ -95,15 +95,16 @@ defmodule SymphonyV2.Settings do
   end
 
   @doc "Persists the pipeline paused state."
-  @spec set_pipeline_paused(boolean()) :: :ok
+  @spec set_pipeline_paused(boolean()) :: :ok | {:error, Ecto.Changeset.t()}
   def set_pipeline_paused(paused) when is_boolean(paused) do
     setting = get_settings()
 
-    setting
-    |> Ecto.Changeset.change(%{pipeline_paused: paused})
-    |> Repo.update()
-
-    :ok
+    case setting
+         |> Ecto.Changeset.change(%{pipeline_paused: paused})
+         |> Repo.update() do
+      {:ok, _} -> :ok
+      {:error, changeset} -> {:error, changeset}
+    end
   end
 
   @doc """

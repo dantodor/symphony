@@ -107,6 +107,9 @@ defmodule SymphonyV2.Plans do
     else
       {:error, {:invalid_transition, subtask.status, new_status}}
     end
+  rescue
+    Ecto.StaleEntryError ->
+      {:error, {:stale_subtask, subtask.id, subtask.status, new_status}}
   end
 
   @doc "Resets a subtask for retry, clearing execution artifacts and setting status to pending."

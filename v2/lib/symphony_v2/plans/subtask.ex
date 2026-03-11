@@ -114,5 +114,6 @@ defmodule SymphonyV2.Plans.Subtask do
     subtask
     |> change(status: new_status)
     |> validate_inclusion(:status, @statuses)
+    |> optimistic_lock(:lock_version)
   end
 end

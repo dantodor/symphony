@@ -264,8 +264,16 @@ defmodule SymphonyV2Web.DashboardLive do
     queued_tasks = Tasks.list_queued_tasks()
 
     # Subscribe to new task/subtask topics if task changed
+    old_task = socket.assigns.task
+
     if connected?(socket) && task != nil &&
-         task.id != (socket.assigns.task && socket.assigns.task.id) do
+         task.id != (old_task && old_task.id) do
+      # Unsubscribe from old task/subtask topics to prevent leak
+      if old_task do
+        Phoenix.PubSub.unsubscribe(SymphonyV2.PubSub, Topics.task(old_task.id))
+        unsubscribe_from_subtasks(socket.assigns.plan)
+      end
+
       Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.task(task.id))
       subscribe_to_subtasks(plan)
     end
@@ -293,6 +301,14 @@ defmodule SymphonyV2Web.DashboardLive do
   defp subscribe_to_subtasks(plan) do
     Enum.each(plan.subtasks, fn subtask ->
       Phoenix.PubSub.subscribe(SymphonyV2.PubSub, Topics.subtask(subtask.id))
+    end)
+  end
+
+  defp unsubscribe_from_subtasks(nil), do: :ok
+
+  defp unsubscribe_from_subtasks(plan) do
+    Enum.each(plan.subtasks, fn subtask ->
+      Phoenix.PubSub.unsubscribe(SymphonyV2.PubSub, Topics.subtask(subtask.id))
     end)
   end
 

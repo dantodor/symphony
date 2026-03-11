@@ -21,6 +21,7 @@ defmodule SymphonyV2.Tasks.Task do
     field :review_requested, :boolean, default: false
     field :reviewed_at, :utc_datetime
     field :queue_position, :integer
+    field :lock_version, :integer, default: 1
 
     belongs_to :creator, User, foreign_key: :creator_id, type: :id
     belongs_to :reviewer, User, foreign_key: :reviewer_id, type: :id
@@ -54,6 +55,7 @@ defmodule SymphonyV2.Tasks.Task do
       true ->
         task
         |> change(status: new_status)
+        |> optimistic_lock(:lock_version)
 
       false ->
         task

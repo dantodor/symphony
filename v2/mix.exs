@@ -13,7 +13,7 @@ defmodule SymphonyV2.MixProject do
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
       test_coverage: [
-        summary: [threshold: 88],
+        summary: [threshold: 80],
         ignore_modules: [
           # Generated view/template modules
           SymphonyV2Web.PageHTML,

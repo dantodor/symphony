@@ -19,9 +19,12 @@ defmodule SymphonyV2.Pipeline do
   alias SymphonyV2.AppConfig
   alias SymphonyV2.GitOps
   alias SymphonyV2.Plans
+  alias SymphonyV2.Plans.Subtask
   alias SymphonyV2.PubSub.Topics
+  alias SymphonyV2.Repo
   alias SymphonyV2.Settings
   alias SymphonyV2.Tasks
+  alias SymphonyV2.Tasks.Task
   alias SymphonyV2.TestRunner
   alias SymphonyV2.Workspace
 
@@ -130,7 +133,9 @@ defmodule SymphonyV2.Pipeline do
       current_step: nil,
       workspace: nil,
       config: config,
-      paused: false
+      paused: false,
+      worker_ref: nil,
+      agent_timeout_ref: nil
     }
 
     # Recover from DB on startup
@@ -279,7 +284,7 @@ defmodule SymphonyV2.Pipeline do
   end
 
   def handle_call(:get_state, _from, state) do
-    {:reply, Map.delete(state, :config), state}
+    {:reply, state |> Map.drop([:config, :worker_ref, :agent_timeout_ref]), state}
   end
 
   def handle_call(:reset, _from, state) do
@@ -300,6 +305,128 @@ defmodule SymphonyV2.Pipeline do
   def handle_info({:continue, {:run_planning, task}}, state) do
     {:noreply, run_planning(state, task)}
   end
+
+  # --- Async agent/worker completion handlers ---
+
+  # Subtask agent completed execution
+  def handle_info({:agent_complete, result}, %{current_step: :executing_subtask} = state) do
+    state = cancel_async_work(state)
+    subtask = Plans.get_subtask!(state.current_subtask_id)
+    {:noreply, handle_agent_complete(state, subtask, result)}
+  rescue
+    Ecto.NoResultsError ->
+      Logger.error("Subtask not found during agent completion",
+        subtask_id: state.current_subtask_id
+      )
+
+      {:noreply, fail_current_task(state, "Subtask record not found")}
+  end
+
+  # Planning worker completed
+  def handle_info({:planning_complete, result}, %{current_step: :planning} = state) do
+    state = cancel_async_work(state)
+
+    state =
+      case result do
+        {:ok, _plan} ->
+          task = Tasks.get_task!(state.current_task_id)
+          handle_planning_success(state, task, state.config)
+
+        {:error, reason} ->
+          Logger.error("Planning failed",
+            task_id: state.current_task_id,
+            reason: inspect(reason)
+          )
+
+          broadcast(:task, state.current_task_id, {:task_failed, reason})
+          fail_current_task(state, "Planning failed: #{inspect(reason)}")
+      end
+
+    {:noreply, state}
+  rescue
+    Ecto.NoResultsError ->
+      Logger.error("Task not found during planning completion",
+        task_id: state.current_task_id
+      )
+
+      {:noreply, return_idle(state)}
+  end
+
+  # Review worker completed
+  def handle_info({:review_complete, subtask_id, result}, %{current_step: :reviewing} = state) do
+    state = cancel_async_work(state)
+    subtask = Plans.get_subtask!(subtask_id)
+    {:noreply, handle_review_result(state, subtask, result)}
+  rescue
+    Ecto.NoResultsError ->
+      Logger.error("Subtask not found during review completion", subtask_id: subtask_id)
+      {:noreply, fail_current_task(state, "Subtask record not found during review")}
+  end
+
+  # Worker/agent process crashed
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{worker_ref: ref} = state
+      )
+      when reason != :normal do
+    state = cancel_async_work(state)
+
+    case state.current_step do
+      :executing_subtask ->
+        Logger.warning("Agent process crashed",
+          subtask_id: state.current_subtask_id,
+          reason: inspect(reason)
+        )
+
+        case safe_get_subtask(state.current_subtask_id) do
+          {:ok, subtask} ->
+            {:noreply, handle_agent_complete(state, subtask, %{status: :failed, exit_code: 1})}
+
+          :error ->
+            {:noreply, fail_current_task(state, "Agent crashed and subtask not found")}
+        end
+
+      :planning ->
+        {:noreply, fail_current_task(state, "Planning worker crashed: #{inspect(reason)}")}
+
+      :reviewing ->
+        case safe_get_subtask(state.current_subtask_id) do
+          {:ok, subtask} ->
+            {:noreply, handle_review_result(state, subtask, {:error, {:worker_crashed, reason}})}
+
+          :error ->
+            {:noreply, fail_current_task(state, "Review crashed and subtask not found")}
+        end
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  # Normal process exit — ignore (result already handled via completion message)
+  def handle_info({:DOWN, ref, :process, _pid, :normal}, %{worker_ref: ref} = state) do
+    {:noreply, %{state | worker_ref: nil}}
+  end
+
+  # Agent safety timeout
+  def handle_info({:agent_safety_timeout, ref}, %{worker_ref: ref} = state) do
+    Logger.warning("Pipeline safety timeout triggered", subtask_id: state.current_subtask_id)
+    state = cancel_async_work(state)
+
+    case safe_get_subtask(state.current_subtask_id) do
+      {:ok, subtask} ->
+        {:noreply, handle_agent_complete(state, subtask, %{status: :timeout})}
+
+      :error ->
+        {:noreply, fail_current_task(state, "Agent timed out and subtask not found")}
+    end
+  end
+
+  # Stale async messages (from a previous run) — ignore
+  def handle_info({:agent_complete, _result}, state), do: {:noreply, state}
+  def handle_info({:planning_complete, _result}, state), do: {:noreply, state}
+  def handle_info({:review_complete, _id, _result}, state), do: {:noreply, state}
+  def handle_info({:agent_safety_timeout, _ref}, state), do: {:noreply, state}
 
   # --- Task lifecycle ---
 
@@ -335,15 +462,15 @@ defmodule SymphonyV2.Pipeline do
       safehouse_opts: []
     ]
 
-    case PlanningAgent.run(task, workspace, planning_opts) do
-      {:ok, _plan} ->
-        handle_planning_success(state, task, config)
+    pipeline = self()
 
-      {:error, reason} ->
-        Logger.error("Planning failed", task_id: task.id, reason: inspect(reason))
-        broadcast(:task, task.id, {:task_failed, reason})
-        fail_current_task(state, "Planning failed: #{inspect(reason)}")
-    end
+    {_pid, ref} =
+      spawn_monitor(fn ->
+        result = PlanningAgent.run(task, workspace, planning_opts)
+        send(pipeline, {:planning_complete, result})
+      end)
+
+    %{state | worker_ref: ref}
   end
 
   defp handle_planning_success(state, task, config) do
@@ -445,7 +572,7 @@ defmodule SymphonyV2.Pipeline do
 
     with {:ok, branch_name} <- create_subtask_branch(workspace, task.id, subtask, plan),
          {:ok, subtask} <- dispatch_subtask(subtask, branch_name) do
-      launch_and_wait_for_agent(state, subtask)
+      launch_agent(state, subtask)
     else
       {:error, reason} ->
         Logger.error("Subtask setup failed", subtask_id: subtask.id, reason: inspect(reason))
@@ -457,7 +584,7 @@ defmodule SymphonyV2.Pipeline do
     Plans.update_subtask(subtask, %{branch_name: branch_name, status: "dispatched"})
   end
 
-  defp launch_and_wait_for_agent(state, subtask) do
+  defp launch_agent(state, subtask) do
     config = state.config
     prompt = build_subtask_prompt(subtask)
     {:ok, agent_type} = AgentRegistry.normalize_agent_type(subtask.agent_type)
@@ -483,7 +610,7 @@ defmodule SymphonyV2.Pipeline do
         safehouse_opts: []
       }
 
-      run_agent_and_handle_result(state, subtask, agent_opts, config.agent_timeout_ms)
+      start_agent_async(state, subtask, agent_opts, config.agent_timeout_ms)
     else
       {:error, reason} ->
         Logger.error("Agent launch setup failed",
@@ -495,28 +622,19 @@ defmodule SymphonyV2.Pipeline do
     end
   end
 
-  defp run_agent_and_handle_result(state, subtask, agent_opts, timeout_ms) do
+  defp start_agent_async(state, subtask, agent_opts, timeout_ms) do
     case AgentSupervisor.start_agent(agent_opts) do
       {:ok, pid} ->
-        # Monitor the agent process for crash detection
-        Process.monitor(pid)
+        ref = Process.monitor(pid)
 
-        receive do
-          {:agent_complete, result} ->
-            handle_agent_complete(state, subtask, result)
+        timer =
+          Process.send_after(
+            self(),
+            {:agent_safety_timeout, ref},
+            timeout_ms + @pipeline_timeout_buffer_ms
+          )
 
-          {:DOWN, _ref, :process, ^pid, reason} when reason != :normal ->
-            Logger.warning("Agent process crashed",
-              subtask_id: subtask.id,
-              reason: inspect(reason)
-            )
-
-            handle_agent_complete(state, subtask, %{status: :failed, exit_code: 1})
-        after
-          timeout_ms + @pipeline_timeout_buffer_ms ->
-            Logger.warning("Pipeline safety timeout triggered", subtask_id: subtask.id)
-            handle_agent_complete(state, subtask, %{status: :timeout})
-        end
+        %{state | worker_ref: ref, agent_timeout_ref: timer}
 
       {:error, reason} ->
         Logger.error("Failed to start agent",
@@ -644,50 +762,61 @@ defmodule SymphonyV2.Pipeline do
       diff: get_diff_for_review(workspace, base_branch, subtask.branch_name)
     ]
 
-    case ReviewAgent.run(subtask, workspace, review_opts) do
-      {:ok, %{verdict: "approved"}} ->
-        broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
-        # Subtask already marked as succeeded by ReviewAgent
-        advance_to_next_subtask(state)
+    pipeline = self()
+    subtask_id = subtask.id
 
-      {:ok, %{verdict: "rejected", reasoning: reasoning}} ->
-        handle_subtask_failure(state, subtask, "Review rejected: #{reasoning}")
+    {_pid, ref} =
+      spawn_monitor(fn ->
+        result = ReviewAgent.run(subtask, workspace, review_opts)
+        send(pipeline, {:review_complete, subtask_id, result})
+      end)
 
-      {:error, {:same_agent_type, _}} ->
-        # Review agent is same type as executor — skip review, auto-approve
-        Logger.warning("Skipping review — same agent type", subtask_id: subtask.id)
+    %{state | worker_ref: ref}
+  end
+
+  defp handle_review_result(state, subtask, {:ok, %{verdict: "approved"}}) do
+    broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
+    advance_to_next_subtask(state)
+  end
+
+  defp handle_review_result(state, subtask, {:ok, %{verdict: "rejected", reasoning: reasoning}}) do
+    handle_subtask_failure(state, subtask, "Review rejected: #{reasoning}")
+  end
+
+  defp handle_review_result(state, subtask, {:error, {:same_agent_type, _}}) do
+    Logger.warning("Skipping review — same agent type", subtask_id: subtask.id)
+
+    {:ok, _subtask} =
+      Plans.update_subtask(subtask, %{
+        status: "succeeded",
+        review_verdict: "skipped",
+        review_reasoning: "Review skipped — same agent type as executor"
+      })
+
+    broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
+    advance_to_next_subtask(state)
+  end
+
+  defp handle_review_result(state, subtask, {:error, reason}) do
+    case state.config.review_failure_action do
+      :fail ->
+        handle_subtask_failure(state, subtask, "Review failed: #{inspect(reason)}")
+
+      _auto_approve ->
+        Logger.warning("Review failed, auto-approving subtask",
+          subtask_id: subtask.id,
+          reason: inspect(reason)
+        )
 
         {:ok, _subtask} =
           Plans.update_subtask(subtask, %{
             status: "succeeded",
             review_verdict: "skipped",
-            review_reasoning: "Review skipped — same agent type as executor"
+            review_reasoning: "Review failed: #{inspect(reason)}"
           })
 
         broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
         advance_to_next_subtask(state)
-
-      {:error, reason} ->
-        case state.config.review_failure_action do
-          :fail ->
-            handle_subtask_failure(state, subtask, "Review failed: #{inspect(reason)}")
-
-          _auto_approve ->
-            Logger.warning("Review failed, auto-approving subtask",
-              subtask_id: subtask.id,
-              reason: inspect(reason)
-            )
-
-            {:ok, _subtask} =
-              Plans.update_subtask(subtask, %{
-                status: "succeeded",
-                review_verdict: "skipped",
-                review_reasoning: "Review failed: #{inspect(reason)}"
-              })
-
-            broadcast(:subtask, subtask.id, {:subtask_succeeded, subtask.position})
-            advance_to_next_subtask(state)
-        end
     end
   end
 
@@ -883,10 +1012,18 @@ defmodule SymphonyV2.Pipeline do
   end
 
   defp fail_current_task(state, error_message) do
-    task = Tasks.get_task!(state.current_task_id)
-    fail_task(task, error_message)
-    broadcast(:task, task.id, {:task_failed, error_message})
-    broadcast(:pipeline, {:pipeline_idle, task.id})
+    task_id = state.current_task_id
+
+    case Repo.get(Task, task_id) do
+      nil ->
+        Logger.error("Task not found during failure handling", task_id: task_id)
+
+      task ->
+        fail_task(task, error_message)
+        broadcast(:task, task.id, {:task_failed, error_message})
+    end
+
+    broadcast(:pipeline, {:pipeline_idle, task_id})
 
     # Cleanup workspace on failure too (not just success)
     cleanup_workspace(state)
@@ -894,6 +1031,13 @@ defmodule SymphonyV2.Pipeline do
     idle_state = return_idle(state)
     send(self(), {:continue, :check_queue})
     idle_state
+  end
+
+  defp safe_get_subtask(subtask_id) do
+    case Repo.get(Subtask, subtask_id) do
+      nil -> :error
+      subtask -> {:ok, subtask}
+    end
   end
 
   defp mark_subtask_failed(subtasks, field, value, error_message) do
@@ -1047,8 +1191,18 @@ defmodule SymphonyV2.Pipeline do
 
   defp get_diff_for_review(workspace, base_branch, head_branch) do
     case GitOps.diff(workspace, base_branch, head_branch) do
-      {:ok, diff} -> diff
-      {:error, _} -> ""
+      {:ok, diff} ->
+        diff
+
+      {:error, reason} ->
+        Logger.warning("Failed to get diff for review",
+          workspace: workspace,
+          base_branch: base_branch,
+          head_branch: head_branch,
+          reason: inspect(reason)
+        )
+
+        ""
     end
   end
 
@@ -1087,7 +1241,15 @@ defmodule SymphonyV2.Pipeline do
       )
   end
 
+  defp cancel_async_work(state) do
+    if state.agent_timeout_ref, do: Process.cancel_timer(state.agent_timeout_ref)
+    if state.worker_ref, do: Process.demonitor(state.worker_ref, [:flush])
+    %{state | worker_ref: nil, agent_timeout_ref: nil}
+  end
+
   defp return_idle(state) do
+    state = cancel_async_work(state)
+
     %{
       state
       | status: :idle,
@@ -1095,7 +1257,9 @@ defmodule SymphonyV2.Pipeline do
         current_subtask_id: nil,
         current_step: nil,
         workspace: nil,
-        paused: false
+        paused: false,
+        worker_ref: nil,
+        agent_timeout_ref: nil
     }
   end
 

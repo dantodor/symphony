@@ -5,6 +5,7 @@ defmodule SymphonyV2.Tasks do
 
   import Ecto.Query
 
+  alias SymphonyV2.PubSub.Topics
   alias SymphonyV2.Repo
   alias SymphonyV2.Tasks.Task
 
@@ -62,13 +63,16 @@ defmodule SymphonyV2.Tasks do
       {:ok, updated_task} ->
         Phoenix.PubSub.broadcast(
           SymphonyV2.PubSub,
-          SymphonyV2.PubSub.Topics.tasks(),
+          Topics.tasks(),
           {:task_status_changed, updated_task.id, new_status}
         )
 
       _ ->
         :ok
     end)
+  rescue
+    Ecto.StaleEntryError ->
+      {:error, {:stale_task, task.id, task.status, new_status}}
   end
 
   @doc """
