@@ -24,6 +24,7 @@ defmodule SymphonyV2Web.PlanLive.Show do
      |> assign(:plan, plan)
      |> assign(:agent_types, AgentRegistry.agent_type_strings())
      |> assign(:editing_subtask_id, nil)
+     |> assign(:editing_subtask, nil)
      |> assign(:adding_subtask, false)
      |> assign(:add_position, nil)
      |> assign_edit_form(nil)
@@ -87,6 +88,7 @@ defmodule SymphonyV2Web.PlanLive.Show do
     {:noreply,
      socket
      |> assign(:editing_subtask_id, id)
+     |> assign(:editing_subtask, subtask)
      |> assign_edit_form(subtask)}
   end
 
@@ -94,6 +96,7 @@ defmodule SymphonyV2Web.PlanLive.Show do
     {:noreply,
      socket
      |> assign(:editing_subtask_id, nil)
+     |> assign(:editing_subtask, nil)
      |> assign_edit_form(nil)}
   end
 
@@ -109,13 +112,15 @@ defmodule SymphonyV2Web.PlanLive.Show do
   end
 
   def handle_event("save_edit", %{"subtask" => params}, socket) do
-    subtask = Plans.get_subtask!(socket.assigns.editing_subtask_id)
+    # Use the subtask loaded when edit started to preserve lock_version for optimistic locking
+    subtask = socket.assigns.editing_subtask
 
     case Plans.update_subtask_plan_fields(subtask, params) do
       {:ok, _subtask} ->
         {:noreply,
          socket
          |> assign(:editing_subtask_id, nil)
+         |> assign(:editing_subtask, nil)
          |> assign_edit_form(nil)
          |> reload_plan()
          |> put_flash(:info, "Subtask updated.")}
@@ -129,6 +134,15 @@ defmodule SymphonyV2Web.PlanLive.Show do
       {:error, changeset} ->
         {:noreply, assign(socket, :edit_form, to_form(changeset))}
     end
+  rescue
+    Ecto.StaleEntryError ->
+      {:noreply,
+       socket
+       |> put_flash(:error, "This subtask was modified by another user. Refreshing.")
+       |> assign(:editing_subtask_id, nil)
+       |> assign(:editing_subtask, nil)
+       |> assign_edit_form(nil)
+       |> reload_plan()}
   end
 
   def handle_event("move_up", %{"id" => id}, socket) do

@@ -815,6 +815,51 @@ defmodule SymphonyV2Web.DashboardLiveTest do
     end
   end
 
+  describe "subtask display limit" do
+    setup %{user: user} do
+      {:ok, task} =
+        Tasks.create_task(
+          %{title: "Many subtasks", description: "Desc", review_requested: false},
+          user
+        )
+
+      {:ok, task} = Tasks.update_task_status(task, "planning")
+      {:ok, task} = Tasks.update_task_status(task, "plan_review")
+      {:ok, task} = Tasks.update_task_status(task, "executing")
+
+      {:ok, plan} = Plans.create_plan(%{task_id: task.id, status: "executing"})
+
+      subtask_attrs =
+        for i <- 1..25 do
+          %{position: i, title: "Step #{i}", spec: "Spec #{i}", agent_type: "claude_code"}
+        end
+
+      {:ok, _subtasks} = Plans.create_subtasks_from_plan(plan, subtask_attrs)
+
+      %{task: task, plan: Plans.get_plan_by_task_id(task.id)}
+    end
+
+    test "limits displayed subtasks to 20 by default", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard")
+
+      # Should show "Show all 25 subtasks" button
+      assert html =~ "Show all 25 subtasks"
+      # Step 21 should not be visible (beyond the limit of 20)
+      refute html =~ "Step 21"
+    end
+
+    test "show_all_subtasks reveals all subtasks", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard")
+
+      view |> element("button", "Show all 25 subtasks") |> render_click()
+
+      html = render(view)
+      assert html =~ "Step 21"
+      assert html =~ "Step 25"
+      refute html =~ "Show all"
+    end
+  end
+
   describe "completed task display" do
     test "shows completed task status", %{conn: conn, user: user} do
       {:ok, task} =

@@ -415,6 +415,38 @@ defmodule SymphonyV2Web.PlanLiveTest do
     end
   end
 
+  describe "Show — optimistic locking" do
+    test "concurrent edit shows stale entry error", %{conn: conn, user: user} do
+      {task, plan} = create_task_with_plan(user)
+      subtask = hd(sorted_subtasks(plan))
+
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}/plan")
+
+      # Start editing
+      view
+      |> element(~s(button[phx-click="edit_subtask"][phx-value-id="#{subtask.id}"]))
+      |> render_click()
+
+      # Simulate concurrent update by directly changing lock_version in DB
+      subtask
+      |> Ecto.Changeset.change(%{
+        lock_version: subtask.lock_version + 1,
+        title: "Concurrent Edit"
+      })
+      |> Repo.update!()
+
+      # Now try to save — should get stale entry error
+      view
+      |> form("form", subtask: %{title: "My Edit"})
+      |> render_submit()
+
+      # The view should have exited edit mode and reloaded
+      html = render(view)
+      refute html =~ "Save"
+      assert html =~ "Concurrent Edit"
+    end
+  end
+
   describe "Show — stale data guards" do
     test "approve_plan guards against task no longer in plan_review", %{conn: conn, user: user} do
       task = TasksFixtures.task_fixture(%{creator: user})

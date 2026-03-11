@@ -736,7 +736,7 @@ Use it in all LiveView error flash messages.
 
 ---
 
-## Phase 8: Concurrent Edit Protection & UI Scaling
+## Phase 8: Concurrent Edit Protection & UI Scaling ✅ DONE
 
 **Gaps addressed:** #25 (concurrent plan editing), #28 (dashboard unbounded lists), #30 (review_verdict/reasoning consistency)
 

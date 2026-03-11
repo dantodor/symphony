@@ -33,6 +33,7 @@ defmodule SymphonyV2.Plans.Subtask do
     field :review_reasoning, :string
     field :retry_count, :integer, default: 0
     field :last_error, :string
+    field :lock_version, :integer, default: 1
 
     belongs_to :execution_plan, ExecutionPlan
     has_many :agent_runs, AgentRun
@@ -81,6 +82,18 @@ defmodule SymphonyV2.Plans.Subtask do
     ])
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:review_verdict, @review_verdicts)
+    |> validate_review_consistency()
+  end
+
+  defp validate_review_consistency(changeset) do
+    verdict = get_field(changeset, :review_verdict)
+    reasoning = get_field(changeset, :review_reasoning)
+
+    if verdict == "rejected" && (is_nil(reasoning) || reasoning == "") do
+      add_error(changeset, :review_reasoning, "is required when verdict is rejected")
+    else
+      changeset
+    end
   end
 
   @doc "Changeset for editing subtask plan fields during plan review."
@@ -92,6 +105,7 @@ defmodule SymphonyV2.Plans.Subtask do
     |> validate_inclusion(:agent_type, @agent_types)
     |> validate_length(:title, min: 1)
     |> validate_length(:spec, min: 1)
+    |> optimistic_lock(:lock_version)
   end
 
   @doc "Changeset for updating subtask status."

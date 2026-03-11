@@ -448,7 +448,8 @@ defmodule SymphonyV2Web.TaskLiveTest do
         spec: "Was rejected",
         agent_type: "claude_code",
         status: "failed",
-        review_verdict: "rejected"
+        review_verdict: "rejected",
+        review_reasoning: "Code quality issues found"
       })
 
       {:ok, _view, html} = live(conn, ~p"/tasks/#{task}")

@@ -145,7 +145,12 @@ defmodule SymphonyV2.Plans.SubtaskTest do
       changeset = Subtask.update_changeset(subtask, %{review_verdict: "approved"})
       assert changeset.valid?
 
-      changeset = Subtask.update_changeset(subtask, %{review_verdict: "rejected"})
+      changeset =
+        Subtask.update_changeset(subtask, %{
+          review_verdict: "rejected",
+          review_reasoning: "Code quality issues"
+        })
+
       assert changeset.valid?
 
       changeset = Subtask.update_changeset(subtask, %{review_verdict: "maybe"})
@@ -185,6 +190,82 @@ defmodule SymphonyV2.Plans.SubtaskTest do
       assert "succeeded" in statuses
       assert "failed" in statuses
       assert length(statuses) == 7
+    end
+  end
+
+  describe "update_changeset/2 review consistency" do
+    test "rejected verdict requires review_reasoning" do
+      subtask = subtask_fixture()
+
+      changeset = Subtask.update_changeset(subtask, %{review_verdict: "rejected"})
+      assert %{review_reasoning: ["is required when verdict is rejected"]} = errors_on(changeset)
+    end
+
+    test "rejected verdict with empty reasoning is invalid" do
+      subtask = subtask_fixture()
+
+      changeset =
+        Subtask.update_changeset(subtask, %{review_verdict: "rejected", review_reasoning: ""})
+
+      assert %{review_reasoning: ["is required when verdict is rejected"]} = errors_on(changeset)
+    end
+
+    test "rejected verdict with reasoning is valid" do
+      subtask = subtask_fixture()
+
+      changeset =
+        Subtask.update_changeset(subtask, %{
+          review_verdict: "rejected",
+          review_reasoning: "Code quality issues"
+        })
+
+      assert changeset.valid?
+    end
+
+    test "approved verdict does not require reasoning" do
+      subtask = subtask_fixture()
+
+      changeset = Subtask.update_changeset(subtask, %{review_verdict: "approved"})
+      assert changeset.valid?
+    end
+
+    test "skipped verdict does not require reasoning" do
+      subtask = subtask_fixture()
+
+      changeset = Subtask.update_changeset(subtask, %{review_verdict: "skipped"})
+      assert changeset.valid?
+    end
+  end
+
+  describe "edit_changeset/2 optimistic locking" do
+    test "increments lock_version on update" do
+      subtask = subtask_fixture()
+      assert subtask.lock_version == 1
+
+      changeset =
+        Subtask.edit_changeset(subtask, %{title: "New", spec: "New spec", agent_type: "codex"})
+
+      assert changeset.valid?
+
+      {:ok, updated} = SymphonyV2.Repo.update(changeset)
+      assert updated.lock_version == 2
+    end
+
+    test "raises on stale entry when lock_version mismatches" do
+      subtask = subtask_fixture()
+
+      # Simulate concurrent edit by updating lock_version in DB
+      subtask
+      |> Ecto.Changeset.change(%{lock_version: 99})
+      |> SymphonyV2.Repo.update!()
+
+      # Now try to update with old lock_version — should raise
+      changeset =
+        Subtask.edit_changeset(subtask, %{title: "Stale", spec: "Stale spec", agent_type: "codex"})
+
+      assert_raise Ecto.StaleEntryError, fn ->
+        SymphonyV2.Repo.update(changeset)
+      end
     end
   end
 

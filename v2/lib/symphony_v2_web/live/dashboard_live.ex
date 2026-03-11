@@ -14,6 +14,8 @@ defmodule SymphonyV2Web.DashboardLive do
   alias SymphonyV2Web.PipelineErrors
 
   @max_output_lines 500
+  @default_subtask_display_limit 20
+  @default_queue_display_limit 20
 
   @impl true
   def mount(_params, _session, socket) do
@@ -40,7 +42,9 @@ defmodule SymphonyV2Web.DashboardLive do
      |> assign(:queued_tasks, queued_tasks)
      |> assign(:expanded_subtask_id, nil)
      |> assign(:agent_output, [])
-     |> assign(:agent_run_id, nil)}
+     |> assign(:agent_run_id, nil)
+     |> assign(:subtask_display_limit, @default_subtask_display_limit)
+     |> assign(:queue_display_limit, @default_queue_display_limit)}
   end
 
   # --- Event handlers ---
@@ -112,6 +116,14 @@ defmodule SymphonyV2Web.DashboardLive do
          |> reload_state()
          |> put_flash(:error, PipelineErrors.format(reason))}
     end
+  end
+
+  def handle_event("show_all_subtasks", _params, socket) do
+    {:noreply, assign(socket, :subtask_display_limit, :infinity)}
+  end
+
+  def handle_event("show_all_queued", _params, socket) do
+    {:noreply, assign(socket, :queue_display_limit, :infinity)}
   end
 
   def handle_event("toggle_subtask", %{"id" => id}, socket) do
@@ -308,6 +320,18 @@ defmodule SymphonyV2Web.DashboardLive do
 
   defp sorted_subtasks(nil), do: []
   defp sorted_subtasks(plan), do: plan.subtasks |> Enum.sort_by(& &1.position)
+
+  defp displayed_subtasks(plan, :infinity), do: sorted_subtasks(plan)
+  defp displayed_subtasks(plan, limit), do: sorted_subtasks(plan) |> Enum.take(limit)
+
+  defp displayed_queue(tasks, :infinity), do: tasks
+  defp displayed_queue(tasks, limit), do: Enum.take(tasks, limit)
+
+  defp subtask_count(nil), do: 0
+  defp subtask_count(plan), do: length(plan.subtasks)
+
+  defp displayable_limit(:infinity), do: :infinity
+  defp displayable_limit(n), do: n
 
   defp step_label(nil), do: "Idle"
   defp step_label(:planning), do: "Planning"
@@ -537,7 +561,10 @@ defmodule SymphonyV2Web.DashboardLive do
         <div :if={@plan} class="mt-4">
           <h3 class="text-base font-semibold mb-2">Subtasks</h3>
           <div class="space-y-2">
-            <div :for={subtask <- sorted_subtasks(@plan)} class="card bg-base-200 shadow-sm">
+            <div
+              :for={subtask <- displayed_subtasks(@plan, @subtask_display_limit)}
+              class="card bg-base-200 shadow-sm"
+            >
               <div
                 class="card-body py-3 px-4 cursor-pointer"
                 phx-click="toggle_subtask"
@@ -659,6 +686,13 @@ defmodule SymphonyV2Web.DashboardLive do
               </div>
             </div>
           </div>
+          <button
+            :if={subtask_count(@plan) > displayable_limit(@subtask_display_limit)}
+            phx-click="show_all_subtasks"
+            class="btn btn-sm btn-ghost mt-2 w-full"
+          >
+            Show all {subtask_count(@plan)} subtasks
+          </button>
         </div>
 
         <%!-- Agent Output --%>
@@ -696,7 +730,7 @@ defmodule SymphonyV2Web.DashboardLive do
             </div>
             <ul class="space-y-2 mt-1">
               <li
-                :for={qt <- @queued_tasks}
+                :for={qt <- displayed_queue(@queued_tasks, @queue_display_limit)}
                 class={[
                   "text-sm p-2 rounded",
                   if(@task && qt.id == @task.id,
@@ -718,6 +752,13 @@ defmodule SymphonyV2Web.DashboardLive do
                 </div>
               </li>
             </ul>
+            <button
+              :if={length(@queued_tasks) > displayable_limit(@queue_display_limit)}
+              phx-click="show_all_queued"
+              class="btn btn-xs btn-ghost mt-1 w-full"
+            >
+              Show all {length(@queued_tasks)} tasks
+            </button>
           </div>
         </div>
       </div>
